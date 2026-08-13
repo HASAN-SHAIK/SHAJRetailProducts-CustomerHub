@@ -18,7 +18,8 @@ export const moduleGroups = [
   ]},
   { label: 'Platform', items: [
     { path: '/integrations', label: 'Integrations', icon: 'bi-plug', status: 'contract' },
-    { path: '/security', label: 'Security & Audit', icon: 'bi-shield-check', status: 'live' },
+    { path: '/security', label: 'Security & Approvals', icon: 'bi-shield-check', status: 'live' },
+    { path: '/audit', label: 'Configuration Audit', icon: 'bi-clock-history', status: 'live' },
     { path: '/notifications', label: 'Notifications', icon: 'bi-bell', status: 'contract' },
     { path: '/data', label: 'Data & Backup', icon: 'bi-database-check', status: 'contract' }
   ]},
