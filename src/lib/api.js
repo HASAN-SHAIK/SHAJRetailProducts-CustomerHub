@@ -71,6 +71,11 @@ export const api = {
   registerDevice: (branchId, payload) => centralApi.post(`/branches/${branchId}/devices/register`, payload),
   deactivateDevice: (branchId, deviceId) => centralApi.patch(`/branches/${branchId}/devices/${deviceId}/deactivate`),
 
+  users: () => centralApi.get('/users'),
+  createUser: (payload) => centralApi.post('/users', payload),
+  updateUserRole: (userId, role) => centralApi.patch(`/users/${userId}/role`, { role }),
+  updateUserAccess: (userId, payload) => centralApi.patch(`/users/${userId}/access`, payload),
+
   posHealth: () => posApi.get('/api/v1/health'),
   posStatus: () => posApi.get('/api/v1/status'),
   posConfiguration: () => posApi.get('/api/v1/config'),
