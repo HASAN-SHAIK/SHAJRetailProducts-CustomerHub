@@ -9,6 +9,8 @@ const GROUPS = {
   receipts: { title: 'Receipts & Printing', subtitle: 'Configure receipt defaults and POS printing behavior.', groups: ['receipt'] },
   tax: { title: 'Tax & GST', subtitle: 'Manage GST mode and tax defaults with controlled store overrides.', groups: ['tax'] },
   security: { title: 'Security & Approvals', subtitle: 'Define manager approval and session policies for retail operations.', groups: ['security'] },
+  offline: { title: 'Offline Policies', subtitle: 'Control offline selling, configuration freshness, and synchronization cadence.', groups: ['offline'] },
+  hardware: { title: 'POS Hardware Policies', subtitle: 'Enable or restrict scanner, weighing-scale, and cash-drawer capabilities by scope.', groups: ['hardware'] },
 };
 
 const labelFor = (key) => key.split('.').slice(1).join(' ').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
