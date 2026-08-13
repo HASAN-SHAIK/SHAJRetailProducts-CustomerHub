@@ -13,7 +13,7 @@ export const moduleGroups = [
     { path: '/hardware', label: 'POS Hardware Policies', icon: 'bi-usb-symbol', status: 'live' },
     { path: '/receipts', label: 'Receipts & Printing', icon: 'bi-printer', status: 'live' },
     { path: '/tax', label: 'Tax & GST', icon: 'bi-percent', status: 'live' },
-    { path: '/users', label: 'Users & Access', icon: 'bi-people', status: 'contract' },
+    { path: '/users', label: 'Users & Access', icon: 'bi-people', status: 'live' },
     { path: '/payments', label: 'Payments', icon: 'bi-credit-card', status: 'contract' }
   ]},
   { label: 'Platform', items: [
