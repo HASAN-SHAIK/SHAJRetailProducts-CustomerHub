@@ -7,8 +7,10 @@ export const moduleGroups = [
   ]},
   { label: 'Configure', items: [
     { path: '/business', label: 'Business Profile', icon: 'bi-building', status: 'live' },
-    { path: '/billing', label: 'Billing & Checkout', icon: 'bi-receipt', status: 'partial' },
-    { path: '/inventory', label: 'Inventory Policies', icon: 'bi-box-seam', status: 'partial' },
+    { path: '/billing', label: 'Billing & Checkout', icon: 'bi-receipt', status: 'live' },
+    { path: '/inventory', label: 'Inventory Policies', icon: 'bi-box-seam', status: 'live' },
+    { path: '/offline-policies', label: 'Offline Policies', icon: 'bi-cloud-slash', status: 'live' },
+    { path: '/hardware', label: 'POS Hardware Policies', icon: 'bi-usb-symbol', status: 'live' },
     { path: '/receipts', label: 'Receipts & Printing', icon: 'bi-printer', status: 'live' },
     { path: '/tax', label: 'Tax & GST', icon: 'bi-percent', status: 'live' },
     { path: '/users', label: 'Users & Access', icon: 'bi-people', status: 'contract' },
@@ -16,7 +18,7 @@ export const moduleGroups = [
   ]},
   { label: 'Platform', items: [
     { path: '/integrations', label: 'Integrations', icon: 'bi-plug', status: 'contract' },
-    { path: '/security', label: 'Security & Audit', icon: 'bi-shield-check', status: 'contract' },
+    { path: '/security', label: 'Security & Audit', icon: 'bi-shield-check', status: 'live' },
     { path: '/notifications', label: 'Notifications', icon: 'bi-bell', status: 'contract' },
     { path: '/data', label: 'Data & Backup', icon: 'bi-database-check', status: 'contract' }
   ]},
