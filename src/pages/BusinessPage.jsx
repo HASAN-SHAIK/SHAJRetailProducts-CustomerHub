@@ -1,0 +1,16 @@
+import React, { useEffect, useState } from 'react';
+import { api, unwrap } from '../lib/api';
+
+const blank = { shop_name:'', owner_name:'', mobile_number:'', upi_id:'', gst_number:'', address_line:'', city:'', state:'', pincode:'' };
+export default function BusinessPage() {
+  const [settings, setSettings] = useState(null);
+  const [company, setCompany] = useState(blank);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  useEffect(() => { api.applicationSettings().then((r) => { const s = unwrap(r,'settings'); setSettings(s); setCompany({ ...blank, ...(s?.company || {}) }); }).catch(() => setMessage('Unable to load settings from the Backend.')); }, []);
+  const save = async (e) => { e.preventDefault(); setBusy(true); setMessage(''); try { const r = await api.updateApplicationSettings({ company }); setSettings(unwrap(r,'settings')); setMessage('Business profile saved.'); } catch (err) { setMessage(err?.response?.data?.message || 'Save failed.'); } finally { setBusy(false); } };
+  return <div className="page-stack"><PageHeader title="Business Profile" subtitle="Legal, contact and customer-facing store identity." /><form className="panel form-panel" onSubmit={save}><div className="form-grid"><Field label="Business / shop name" value={company.shop_name} onChange={(v)=>setCompany({...company,shop_name:v})}/><Field label="Owner name" value={company.owner_name} onChange={(v)=>setCompany({...company,owner_name:v})}/><Field label="Mobile number" value={company.mobile_number} onChange={(v)=>setCompany({...company,mobile_number:v})}/><Field label="UPI ID" value={company.upi_id} onChange={(v)=>setCompany({...company,upi_id:v})}/><Field label="GSTIN" value={company.gst_number} onChange={(v)=>setCompany({...company,gst_number:v})}/><Field label="Address" value={company.address_line} onChange={(v)=>setCompany({...company,address_line:v})}/><Field label="City" value={company.city} onChange={(v)=>setCompany({...company,city:v})}/><Field label="State" value={company.state} onChange={(v)=>setCompany({...company,state:v})}/><Field label="Pincode" value={company.pincode} onChange={(v)=>setCompany({...company,pincode:v})}/></div>{message&&<div className="inline-message">{message}</div>}<div className="form-actions"><span>Stored in Backend application settings / shop details.</span><button className="primary-btn" disabled={busy}>{busy?'Saving…':'Save business profile'}</button></div></form><section className="panel"><h2>Operational defaults</h2><div className="summary-cards"><Summary label="Currency" value={settings?.store?.currency||'INR'}/><Summary label="Invoice prefix" value={settings?.store?.invoice_prefix||'INV'}/><Summary label="GST mode" value={settings?.tax?.gst_mode||'INCLUSIVE'}/><Summary label="Receipt width" value={`${settings?.printer?.receipt_paper_width_mm||80} mm`}/></div></section></div>;
+}
+export function PageHeader({title,subtitle,action}){return <div className="page-header"><div><span className="eyebrow">SHAJ Retail Hub</span><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>}
+function Field({label,value,onChange}){return <label className="field"><span>{label}</span><input value={value??''} onChange={(e)=>onChange(e.target.value)}/></label>}
+function Summary({label,value}){return <div className="summary-card"><span>{label}</span><strong>{value}</strong></div>}
