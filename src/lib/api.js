@@ -77,6 +77,9 @@ export const api = {
   branchDevices: (branchId) => centralApi.get(`/branches/${branchId}/devices`),
   registerDevice: (branchId, payload) => centralApi.post(`/branches/${branchId}/devices/register`, payload),
   deactivateDevice: (branchId, deviceId) => centralApi.patch(`/branches/${branchId}/devices/${deviceId}/deactivate`),
+  posRegistrationRequests: (status) => centralApi.get('/pos-registration/requests', { params: { status: status || undefined } }),
+  approvePosRegistration: (requestId, payload) => centralApi.post(`/pos-registration/requests/${requestId}/approve`, payload),
+  rejectPosRegistration: (requestId) => centralApi.post(`/pos-registration/requests/${requestId}/reject`),
 
   users: () => centralApi.get('/users'),
   createUser: (payload) => centralApi.post('/users', payload),
