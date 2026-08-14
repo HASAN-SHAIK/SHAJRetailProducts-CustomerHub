@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const CENTRAL_API_URL = import.meta.env.VITE_CENTRAL_API_URL || 'http://localhost:5001/api';
 const POS_SERVICE_URL = import.meta.env.VITE_POS_SERVICE_URL || 'http://127.0.0.1:4782';
+const POS_LOCAL_API_TOKEN = import.meta.env.VITE_POS_LOCAL_API_TOKEN || '';
 const TOKEN_KEY = 'shaj_hub_access_token';
 const DEVICE_KEY = 'shaj_hub_device_id';
 
@@ -22,6 +23,12 @@ centralApi.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers['x-device-id'] = getDeviceId();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+posApi.interceptors.request.use((config) => {
+  config.headers = config.headers || {};
+  if (POS_LOCAL_API_TOKEN) config.headers['X-POS-Local-Token'] = POS_LOCAL_API_TOKEN;
   return config;
 });
 
