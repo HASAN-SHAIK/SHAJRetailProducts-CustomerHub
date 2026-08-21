@@ -5,6 +5,9 @@ export const moduleGroups = [
     { path: '/devices', label: 'POS & Devices', icon: 'bi-pc-display-horizontal', status: 'live' },
     { path: '/offline-sync', label: 'Offline & Sync', icon: 'bi-arrow-repeat', status: 'partial' }
   ]},
+  { label: 'Analyze', items: [
+    { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' }
+  ]},
   { label: 'Configure', items: [
     { path: '/business', label: 'Business Profile', icon: 'bi-building', status: 'live' },
     { path: '/billing', label: 'Billing & Checkout', icon: 'bi-receipt', status: 'live' },
