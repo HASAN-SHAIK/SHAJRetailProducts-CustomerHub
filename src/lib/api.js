@@ -89,6 +89,12 @@ export const api = {
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
+  dashboardGrowthComparison: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/growth-comparison', {
+    params: { range, branch_id: branchId || undefined, location: location || undefined },
+  }),
+  dashboardSalesTrend: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/sales-trend', {
+    params: { range, branch_id: branchId || undefined, location: location || undefined },
+  }),
 
   posHealth: () => posApi.get('/api/v1/health'),
   posReady: () => posApi.get('/api/v1/ready'),

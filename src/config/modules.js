@@ -6,7 +6,8 @@ export const moduleGroups = [
     { path: '/offline-sync', label: 'Offline & Sync', icon: 'bi-arrow-repeat', status: 'partial' }
   ]},
   { label: 'Analyze', items: [
-    { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' }
+    { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' },
+    { path: '/analytics/profit-growth', label: 'Profit & Growth', icon: 'bi-bar-chart-line', status: 'live' }
   ]},
   { label: 'Configure', items: [
     { path: '/business', label: 'Business Profile', icon: 'bi-building', status: 'live' },
