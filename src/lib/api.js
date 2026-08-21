@@ -86,6 +86,10 @@ export const api = {
   updateUserRole: (userId, role) => centralApi.patch(`/users/${userId}/role`, { role }),
   updateUserAccess: (userId, payload) => centralApi.patch(`/users/${userId}/access`, payload),
 
+  dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
+    params: { range, branch_id: branchId || undefined, location: location || undefined },
+  }),
+
   posHealth: () => posApi.get('/api/v1/health'),
   posReady: () => posApi.get('/api/v1/ready'),
   posStatus: () => posApi.get('/api/v1/status'),
