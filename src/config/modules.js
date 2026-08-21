@@ -11,7 +11,8 @@ export const moduleGroups = [
     { path: '/analytics/inventory', label: 'Inventory Analytics', icon: 'bi-boxes', status: 'live' },
     { path: '/analytics/products-categories', label: 'Products & Categories', icon: 'bi-tags', status: 'live' },
     { path: '/analytics/customers-credit', label: 'Customers & Credit', icon: 'bi-person-lines-fill', status: 'live' },
-    { path: '/analytics/branches', label: 'Branch Performance', icon: 'bi-geo-alt', status: 'live' }
+    { path: '/analytics/branches', label: 'Branch Performance', icon: 'bi-geo-alt', status: 'live' },
+    { path: '/analytics/smart-insights', label: 'Smart Insights', icon: 'bi-stars', status: 'live' }
   ]},
   { label: 'Configure', items: [
     { path: '/business', label: 'Business Profile', icon: 'bi-building', status: 'live' },

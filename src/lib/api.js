@@ -101,6 +101,9 @@ export const api = {
   dashboardLocationPerformance: ({ range = 'this_month' } = {}) => centralApi.get('/dashboard/location-performance', {
     params: { range },
   }),
+  dashboardSmartInsights: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/smart-insights', {
+    params: { range, branch_id: branchId || undefined, location: location || undefined },
+  }),
   dashboardLocationsList: () => centralApi.get('/dashboard/locations-list'),
   inventoryReport: ({ branchId } = {}) => centralApi.get('/reports/inventory', {
     params: { branch_id: branchId || undefined },
