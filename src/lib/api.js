@@ -87,7 +87,12 @@ export const api = {
   updateUserAccess: (userId, payload) => centralApi.patch(`/users/${userId}/access`, payload),
 
   posHealth: () => posApi.get('/api/v1/health'),
+  posReady: () => posApi.get('/api/v1/ready'),
   posStatus: () => posApi.get('/api/v1/status'),
+  posDiagnostics: () => posApi.get('/api/v1/diagnostics'),
+  posSyncDiagnostics: () => posApi.get('/api/v1/diagnostics/sync-events', { params: { limit: 50 } }),
+  posSyncStatus: () => posApi.get('/api/v1/sync/status'),
+  runPosSync: () => posApi.post('/api/v1/sync/now'),
   posConfiguration: () => posApi.get('/api/v1/config'),
   refreshPosConfiguration: () => posApi.post('/api/v1/config/refresh'),
 };
