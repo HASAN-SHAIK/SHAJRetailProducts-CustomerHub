@@ -102,6 +102,9 @@ export const api = {
   inventoryReport: ({ branchId } = {}) => centralApi.get('/reports/inventory', {
     params: { branch_id: branchId || undefined },
   }),
+  customerOutstandingReport: ({ page = 1, limit = 50 } = {}) => centralApi.get('/reports/customers-outstanding', {
+    params: { page, limit },
+  }),
 
   posHealth: () => posApi.get('/api/v1/health'),
   posReady: () => posApi.get('/api/v1/ready'),
