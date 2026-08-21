@@ -95,6 +95,10 @@ export const api = {
   dashboardSalesTrend: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/sales-trend', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
+  dashboardCategoryPerformance: ({ range = 'this_month', location } = {}) => centralApi.get('/dashboard/category-performance', {
+    params: { range, location: location || undefined },
+  }),
+  dashboardLocationsList: () => centralApi.get('/dashboard/locations-list'),
   inventoryReport: ({ branchId } = {}) => centralApi.get('/reports/inventory', {
     params: { branch_id: branchId || undefined },
   }),

@@ -8,7 +8,8 @@ export const moduleGroups = [
   { label: 'Analyze', items: [
     { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' },
     { path: '/analytics/profit-growth', label: 'Profit & Growth', icon: 'bi-bar-chart-line', status: 'live' },
-    { path: '/analytics/inventory', label: 'Inventory Analytics', icon: 'bi-boxes', status: 'live' }
+    { path: '/analytics/inventory', label: 'Inventory Analytics', icon: 'bi-boxes', status: 'live' },
+    { path: '/analytics/products-categories', label: 'Products & Categories', icon: 'bi-tags', status: 'live' }
   ]},
   { label: 'Configure', items: [
     { path: '/business', label: 'Business Profile', icon: 'bi-building', status: 'live' },
