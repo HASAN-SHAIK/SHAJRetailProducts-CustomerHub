@@ -101,6 +101,15 @@ export const api = {
   updateStaff: (staffId, payload) => centralApi.put(`/v1/staff/${encodeURIComponent(String(staffId))}`, payload),
   deleteStaff: (staffId) => centralApi.delete(`/v1/staff/${encodeURIComponent(String(staffId))}`),
 
+  expenses: ({ branchId = '', type = '', from = '', to = '', page = 1, limit = 200 } = {}) => centralApi.get('/expenses', {
+    params: { branch_id: branchId || undefined, type: type || undefined, from: from || undefined, to: to || undefined, page, limit },
+  }),
+  createExpense: (payload) => centralApi.post('/expenses', payload),
+  updateExpense: (expenseId, payload) => centralApi.put(`/expenses/${encodeURIComponent(String(expenseId))}`, payload),
+  deleteExpense: (expenseId) => centralApi.delete(`/expenses/${encodeURIComponent(String(expenseId))}`),
+  dailyExpenseReport: ({ date, branchId } = {}) => centralApi.get('/expenses/daily', { params: { date: date || undefined, branch_id: branchId || undefined } }),
+  monthlyExpenseReport: ({ month, branchId } = {}) => centralApi.get('/expenses/monthly', { params: { month: month || undefined, branch_id: branchId || undefined } }),
+
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
