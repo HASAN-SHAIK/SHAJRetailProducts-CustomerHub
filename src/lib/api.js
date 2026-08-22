@@ -110,6 +110,23 @@ export const api = {
   dailyExpenseReport: ({ date, branchId } = {}) => centralApi.get('/expenses/daily', { params: { date: date || undefined, branch_id: branchId || undefined } }),
   monthlyExpenseReport: ({ month, branchId } = {}) => centralApi.get('/expenses/monthly', { params: { month: month || undefined, branch_id: branchId || undefined } }),
 
+  accountReceipts: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/receipt', { params: { from: from || undefined, to: to || undefined } }),
+  createAccountReceipt: (payload) => centralApi.post('/accounts/receipt', payload),
+  accountPayments: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/payment', { params: { from: from || undefined, to: to || undefined } }),
+  createAccountPayment: (payload) => centralApi.post('/accounts/payment', payload),
+  accountCashBook: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/cashbook', { params: { from: from || undefined, to: to || undefined } }),
+  accountBankBook: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/bankbook', { params: { from: from || undefined, to: to || undefined } }),
+  accountLedger: ({ from = '', to = '', ledgerId = '' } = {}) => centralApi.get('/accounts/ledger', { params: { from: from || undefined, to: to || undefined, ledger_id: ledgerId || undefined } }),
+  accountOutstanding: () => centralApi.get('/accounts/outstanding'),
+  accountOpeningSetup: () => centralApi.get('/accounts/opening-setup'),
+  saveAccountOpeningSetup: (payload) => centralApi.post('/accounts/opening-setup', payload),
+  finalizeAccountOpening: (payload) => centralApi.post('/accounts/finalize-opening', payload),
+  accountReconciliation: () => centralApi.get('/accounts/reconcile'),
+  accountTrialBalance: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/trial-balance', { params: { from: from || undefined, to: to || undefined } }),
+  accountProfitLoss: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/profit-loss', { params: { from: from || undefined, to: to || undefined } }),
+  accountBalanceSheet: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/balance-sheet', { params: { from: from || undefined, to: to || undefined } }),
+  accountGstSummary: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/gst-summary', { params: { from: from || undefined, to: to || undefined } }),
+
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
