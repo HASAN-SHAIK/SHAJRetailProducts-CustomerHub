@@ -18,4 +18,5 @@ jobs:
       - run: npm run test:dashboard
       - run: npm run test:customers
       - run: npm run test:staff
+      - run: npm run test:expenses
       - run: npm run build
