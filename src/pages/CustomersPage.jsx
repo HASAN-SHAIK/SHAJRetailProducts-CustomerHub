@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 
 const emptyForm = {
   type: 'retail', name: '', phone: '', email: '', shop_name: '', gst_number: '',
-  address: '', location: '', notes: '', is_active: true,
+  address: '', location: '', notes: '', credit_limit: '0', is_active: true,
 };
 
 const getBody = (response) => response?.data?.data ?? response?.data ?? {};
@@ -69,7 +69,8 @@ export default function CustomersPage() {
     setForm({
       type: c.type || 'retail', name: c.name || '', phone: c.phone || c.mobile || '', email: c.email || '',
       shop_name: c.shop_name || '', gst_number: c.gst_number || '', address: c.address || '',
-      location: c.location || c.city || '', notes: c.notes || '', is_active: c.is_active !== false,
+      location: c.location || c.city || '', notes: c.notes || '', credit_limit: String(c.credit_limit ?? 0),
+      is_active: c.is_active !== false,
     });
   };
   const change = (key) => (event) => setForm((prev) => ({ ...prev, [key]: key === 'is_active' ? event.target.checked : event.target.value }));
@@ -77,10 +78,13 @@ export default function CustomersPage() {
     event.preventDefault();
     if (!form.name.trim() || !form.phone.trim()) { setError('Name and phone are required.'); return; }
     if (form.type === 'wholesale' && !form.shop_name.trim()) { setError('Shop name is required for wholesale customers.'); return; }
+    const creditLimit = Number(form.credit_limit);
+    if (!Number.isFinite(creditLimit) || creditLimit < 0) { setError('Credit limit must be zero or greater.'); return; }
     setSaving(true); setError('');
     try {
-      if (editing && selectedId) await api.updateCustomer(selectedId, form);
-      else await api.createCustomer(form);
+      const payload = { ...form, credit_limit: creditLimit };
+      if (editing && selectedId) await api.updateCustomer(selectedId, payload);
+      else await api.createCustomer(payload);
       setEditing(false); setCreating(false); setForm(emptyForm);
       await loadCustomers('');
       if (selectedId && editing) await loadDetail(selectedId);
@@ -124,6 +128,8 @@ function CustomerForm({ form, change, save, saving, onCancel }) {
     <label>Phone<input className="text-input" value={form.phone} onChange={change('phone')}/></label>
     <label>Email<input className="text-input" value={form.email} onChange={change('email')}/></label>
     {form.type === 'wholesale' && <><label>Shop name<input className="text-input" value={form.shop_name} onChange={change('shop_name')}/></label><label>GST number<input className="text-input" value={form.gst_number} onChange={change('gst_number')}/></label></>}
+    <label>Credit limit<input className="text-input" type="number" min="0" step="0.01" value={form.credit_limit} onChange={change('credit_limit')}/></label>
+    <small>Outstanding balance is a Central financial projection and is not directly editable here.</small>
     <label>Address<input className="text-input" value={form.address} onChange={change('address')}/></label>
     <label>Location<input className="text-input" value={form.location} onChange={change('location')}/></label>
     <label>Notes<textarea className="text-input" value={form.notes} onChange={change('notes')}/></label>
