@@ -93,6 +93,14 @@ export const api = {
   createCustomer: (payload) => centralApi.post('/v1/customers', payload),
   updateCustomer: (customerId, payload) => centralApi.put(`/v1/customers/${encodeURIComponent(String(customerId))}`, payload),
 
+  staff: ({ search = '', status = '', branchId = '' } = {}) => centralApi.get('/v1/staff', {
+    params: { search: search || undefined, status: status || undefined, branch_id: branchId || undefined },
+  }),
+  staffMember: (staffId) => centralApi.get(`/v1/staff/${encodeURIComponent(String(staffId))}`),
+  createStaff: (payload) => centralApi.post('/v1/staff', payload),
+  updateStaff: (staffId, payload) => centralApi.put(`/v1/staff/${encodeURIComponent(String(staffId))}`, payload),
+  deleteStaff: (staffId) => centralApi.delete(`/v1/staff/${encodeURIComponent(String(staffId))}`),
+
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
