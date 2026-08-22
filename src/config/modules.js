@@ -10,7 +10,8 @@ export const moduleGroups = [
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
   ]},
   { label: 'Finance', items: [
-    { path: '/finance/expenses', label: 'Expenses', icon: 'bi-cash-coin', status: 'live' }
+    { path: '/finance/expenses', label: 'Expenses', icon: 'bi-cash-coin', status: 'live' },
+    { path: '/finance/accounts', label: 'Accounts', icon: 'bi-journal-text', status: 'live' }
   ]},
   { label: 'Analyze', items: [
     { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' },
