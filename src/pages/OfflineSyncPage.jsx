@@ -187,7 +187,9 @@ function buildReadinessModel({ pos, configuration, diagnostics, syncDiagnostics,
 }
 
 function normalizeOutbox(summary, items = []) {
-  const counts = { ...emptyCounts, ...(summary || {}) };
+  const hasSummary = summary && typeof summary === 'object';
+  const hasItems = Array.isArray(items);
+  const counts = { ...emptyCounts, ...(summary || {}), _available: Boolean(hasSummary || hasItems) };
   for (const item of Array.isArray(items) ? items : []) {
     const key = item.status === 'dead_letter' ? 'dead_letter' : item.status;
     if (key in counts) counts[key] += 1;
@@ -196,7 +198,14 @@ function normalizeOutbox(summary, items = []) {
 }
 
 function normalizeInbox(summary, items = []) {
-  const counts = { received: Number(summary?.inbox_received || 0), processing: 0, failed: Number(summary?.inbox_failed || 0) };
+  const hasSummary = summary && typeof summary === 'object';
+  const hasItems = Array.isArray(items);
+  const counts = {
+    received: Number(summary?.received ?? summary?.inbox_received ?? 0),
+    processing: Number(summary?.processing ?? 0),
+    failed: Number(summary?.failed ?? summary?.inbox_failed ?? 0),
+    _available: Boolean(hasSummary || hasItems),
+  };
   for (const item of Array.isArray(items) ? items : []) {
     if (item.status === 'received') counts.received += 1;
     if (item.status === 'processing') counts.processing += 1;
@@ -206,7 +215,7 @@ function normalizeInbox(summary, items = []) {
 }
 
 function hasTelemetry(counts) {
-  return Object.values(counts).some((value) => Number(value) > 0);
+  return Boolean(counts?._available);
 }
 
 function SyncMetric({ icon, title, value, status }) {

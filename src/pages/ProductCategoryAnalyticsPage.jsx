@@ -10,6 +10,8 @@ const RANGE_OPTIONS = [
   ['last_30_days', 'Last 30 days'],
 ];
 
+const PIE_COLORS = ['#38bdf8', '#2dd4bf', '#f59e0b', '#a78bfa', '#fb7185', '#22c55e', '#f97316'];
+
 const currency = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '—';
@@ -21,6 +23,58 @@ const number = (value) => {
   if (!Number.isFinite(numeric)) return '—';
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(numeric);
 };
+
+function AnalyticsPieChart({ title, rows, getLabel, getValue, formatValue }) {
+  const slices = rows
+    .map((row, index) => ({
+      color: PIE_COLORS[index % PIE_COLORS.length],
+      label: getLabel(row) || 'Unattributed',
+      value: Number(getValue(row)) || 0,
+    }))
+    .filter((slice) => slice.value > 0);
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const radius = 72;
+  const circumference = 2 * Math.PI * radius;
+  let consumed = 0;
+
+  if (!total) {
+    return <div className="analytics-pie-card empty"><strong>{title}</strong><span>No chartable data</span></div>;
+  }
+
+  return <div className="analytics-pie-card">
+    <div className="analytics-pie-visual" aria-label={title} role="img">
+      <svg viewBox="0 0 190 190" className="analytics-pie">
+        <circle cx="95" cy="95" r={radius} className="analytics-pie-track" />
+        {slices.map((slice, index) => {
+          const length = (slice.value / total) * circumference;
+          const gap = slices.length > 1 ? 1.5 : 0;
+          const dash = `${Math.max(length - gap, 0)} ${circumference}`;
+          const offset = -consumed;
+          consumed += length;
+          return <circle
+            key={`${slice.label}-${index}`}
+            cx="95"
+            cy="95"
+            r={radius}
+            className="analytics-pie-slice"
+            stroke={slice.color}
+            strokeDasharray={dash}
+            strokeDashoffset={offset}
+          />;
+        })}
+      </svg>
+      <div className="analytics-pie-center"><span>Total</span><strong>{formatValue(total)}</strong></div>
+    </div>
+    <div className="analytics-pie-legend">
+      <strong>{title}</strong>
+      {slices.map((slice, index) => <div className="analytics-pie-legend-row" key={`${slice.label}-legend-${index}`}>
+        <span className="analytics-pie-dot" style={{ backgroundColor: slice.color }} />
+        <span>{slice.label}</span>
+        <b>{number((slice.value / total) * 100)}%</b>
+      </div>)}
+    </div>
+  </div>;
+}
 
 export default function ProductCategoryAnalyticsPage() {
   const [range, setRange] = useState('this_month');
@@ -82,10 +136,11 @@ export default function ProductCategoryAnalyticsPage() {
     {!loading && !error && !hasData && <section className="panel dashboard-state"><i className="bi bi-tags" /><strong>No product/category activity for this selection</strong><span>Try another location or reporting window.</span></section>}
 
     {!loading && !error && hasData && <>
-      <section className="panel"><div className="panel-title"><i className="bi bi-pie-chart" /><div><h2>Category performance</h2><p>Revenue share by sale-time category attribution.</p></div></div><div className="table-wrap"><table><thead><tr><th>Category</th><th>Revenue</th><th>Share</th></tr></thead><tbody>{categories.map((row, index) => <tr key={`${row.category_id || row.category_name || 'category'}-${index}`}><td>{row.category_name || 'Unattributed'}</td><td>{currency(row.revenue)}</td><td>{number(row.percentage)}%</td></tr>)}</tbody></table></div></section>
-      <div className="content-grid two-one">
-        <section className="panel"><div className="panel-title"><i className="bi bi-box-seam" /><div><h2>Top products by quantity</h2><p>Net sold quantity after returns.</p></div></div>{topQuantity.length === 0 ? <div className="dashboard-state"><strong>No product quantity data</strong></div> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Qty sold</th><th>Revenue</th></tr></thead><tbody>{topQuantity.map((row, index) => <tr key={`${row.product_id || row.product_name}-${index}`}><td>{row.product_name || 'Unknown product'}</td><td>{row.category_name || 'Unattributed'}</td><td>{number(row.quantity_sold)}</td><td>{currency(row.revenue)}</td></tr>)}</tbody></table></div>}</section>
-        <section className="panel"><div className="panel-title"><i className="bi bi-trophy" /><div><h2>Top products by revenue</h2><p>Historical product identity from original sale snapshots.</p></div></div>{topRevenue.length === 0 ? <div className="dashboard-state"><strong>No product revenue data</strong></div> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Revenue</th></tr></thead><tbody>{topRevenue.map((row, index) => <tr key={`${row.product_id || row.product_name}-${index}`}><td><strong>{row.product_name || 'Unknown product'}</strong><small>{row.category_name || 'Unattributed'}</small></td><td>{currency(row.revenue)}</td></tr>)}</tbody></table></div>}</section>
+      <section className="panel"><div className="panel-title"><i className="bi bi-pie-chart" /><div><h2>Performance charts</h2><p>Category, quantity, and revenue mix in one view.</p></div></div><div className="analytics-pie-row"><AnalyticsPieChart title="Revenue by category" rows={categories} getLabel={(row) => row.category_name} getValue={(row) => row.revenue} formatValue={currency} /><AnalyticsPieChart title="Quantity mix" rows={topQuantity} getLabel={(row) => row.product_name} getValue={(row) => row.quantity_sold} formatValue={number} /><AnalyticsPieChart title="Revenue mix" rows={topRevenue} getLabel={(row) => row.product_name} getValue={(row) => row.revenue} formatValue={currency} /></div></section>
+      <div className="analytics-table-grid">
+        <section className="panel"><div className="panel-title"><i className="bi bi-tags" /><div><h2>Category performance</h2><p>Revenue share by sale-time category attribution.</p></div></div><div className="table-wrap"><table><thead><tr><th>Category</th><th>Revenue</th><th>Share</th></tr></thead><tbody>{categories.map((row, index) => <tr key={`${row.category_id || row.category_name || 'category'}-${index}`}><td>{row.category_name || 'Unattributed'}</td><td>{currency(row.revenue)}</td><td>{number(row.percentage)}%</td></tr>)}</tbody></table></div></section>
+        <section className="panel"><div className="panel-title"><i className="bi bi-box-seam" /><div><h2>Top products by quantity</h2><p>Net sold quantity after returns.</p></div></div>{topQuantity.length === 0 ? <div className="dashboard-state compact"><strong>No product quantity data</strong></div> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Qty sold</th><th>Revenue</th></tr></thead><tbody>{topQuantity.map((row, index) => <tr key={`${row.product_id || row.product_name}-${index}`}><td>{row.product_name || 'Unknown product'}</td><td>{row.category_name || 'Unattributed'}</td><td>{number(row.quantity_sold)}</td><td>{currency(row.revenue)}</td></tr>)}</tbody></table></div>}</section>
+        <section className="panel"><div className="panel-title"><i className="bi bi-trophy" /><div><h2>Top products by revenue</h2><p>Historical product identity from original sale snapshots.</p></div></div>{topRevenue.length === 0 ? <div className="dashboard-state compact"><strong>No product revenue data</strong></div> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Revenue</th></tr></thead><tbody>{topRevenue.map((row, index) => <tr key={`${row.product_id || row.product_name}-${index}`}><td><strong>{row.product_name || 'Unknown product'}</strong><small>{row.category_name || 'Unattributed'}</small></td><td>{currency(row.revenue)}</td></tr>)}</tbody></table></div>}</section>
       </div>
       <section className="panel dashboard-scope-note"><i className="bi bi-info-circle" /><div><strong>Migration slice 4</strong><span>This replaces POS management-level Category & Products analytics after acceptance. Customer/Credit analytics follows next.</span></div></section>
     </>}
