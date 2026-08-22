@@ -9,6 +9,9 @@ export const moduleGroups = [
     { path: '/customers', label: 'Customers', icon: 'bi-people', status: 'live' },
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
   ]},
+  { label: 'Finance', items: [
+    { path: '/finance/expenses', label: 'Expenses', icon: 'bi-cash-coin', status: 'live' }
+  ]},
   { label: 'Analyze', items: [
     { path: '/analytics/sales', label: 'Sales & Revenue', icon: 'bi-graph-up-arrow', status: 'live' },
     { path: '/analytics/profit-growth', label: 'Profit & Growth', icon: 'bi-bar-chart-line', status: 'live' },
