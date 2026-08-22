@@ -24,6 +24,8 @@ requireText(page, 'Loading customers', 'loading state');
 requireText(page, 'Retry customers', 'retry state');
 requireText(page, 'No customers found', 'empty state');
 requireText(page, 'Edit master profile', 'customer management action');
+requireText(page, 'Credit limit', 'credit limit administration');
+requireText(page, 'Outstanding balance is a Central financial projection and is not directly editable here.', 'financial projection boundary');
 requireText(matrix, 'Checkout customer search/select', 'POS retained checkout boundary');
 requireText(matrix, 'Offline lightweight capture', 'POS retained offline capture boundary');
 
