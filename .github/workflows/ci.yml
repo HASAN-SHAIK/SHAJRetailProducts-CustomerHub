@@ -16,4 +16,8 @@ jobs:
           node-version: '22'
       - run: npm install
       - run: npm run test:dashboard
+      - run: npm run test:customers
+      - run: npm run test:staff
+      - run: npm run test:expenses
+      - run: npm run test:accounts
       - run: npm run build
