@@ -86,6 +86,13 @@ export const api = {
   updateUserRole: (userId, role) => centralApi.patch(`/users/${userId}/role`, { role }),
   updateUserAccess: (userId, payload) => centralApi.patch(`/users/${userId}/access`, payload),
 
+  customers: ({ search = '', page = 1, limit = 100 } = {}) => centralApi.get('/v1/customers', {
+    params: { search: search || undefined, page, limit },
+  }),
+  customerDetail: (customerId) => centralApi.get(`/v1/customers/${encodeURIComponent(String(customerId))}`),
+  createCustomer: (payload) => centralApi.post('/v1/customers', payload),
+  updateCustomer: (customerId, payload) => centralApi.put(`/v1/customers/${encodeURIComponent(String(customerId))}`, payload),
+
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
