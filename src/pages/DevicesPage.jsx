@@ -12,12 +12,15 @@ export default function DevicesPage(){
   const [error,setError]=useState('');
   const [busy,setBusy]=useState('');
   const [assignments,setAssignments]=useState({});
+  const [setup,setSetup]=useState({branch_id:'',terminal_id:''});
+  const [setupCode,setSetupCode]=useState(null);
 
   useEffect(()=>{api.branches().then(r=>{const b=unwrap(r);const list=Array.isArray(b)?b:(b?.branches||[]);setBranches(list);if(!branchId&&list[0]?.id)setBranchId(String(list[0].id));}).catch(()=>setError('Unable to load branches.'));},[]);
   const loadDevices=async(id)=>{if(!id)return;try{const r=await api.branchDevices(id);const b=unwrap(r);setDevices(Array.isArray(b)?b:(b?.devices||[]));}catch(err){setError(err?.response?.data?.message||'Unable to load POS devices.');}};
   const loadRequests=async()=>{try{const r=await api.posRegistrationRequests('PENDING');const b=unwrap(r);setRequests(Array.isArray(b)?b:(b?.requests||[]));}catch(err){setError(err?.response?.data?.message||'Unable to load POS registration requests.');}};
   useEffect(()=>{loadDevices(branchId);},[branchId]);
   useEffect(()=>{loadRequests();const id=setInterval(loadRequests,15000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{window.addEventListener('customerhub:refresh-pos-requests',loadRequests);return()=>window.removeEventListener('customerhub:refresh-pos-requests',loadRequests);},[]);
   const current=useMemo(()=>branches.find(b=>String(b.id)===String(branchId)),[branches,branchId]);
   const deactivate=async(d)=>{if(!branchId||!d?.id)return;try{await api.deactivateDevice(branchId,d.id);await loadDevices(branchId);}catch(err){setError(err?.response?.data?.message||'Unable to update device.');}};
   const updateAssignment=(requestId,patch)=>setAssignments(prev=>({...prev,[requestId]:{branch_id:prev[requestId]?.branch_id||branchId||'',terminal_id:prev[requestId]?.terminal_id||'',...patch}}));
@@ -28,9 +31,34 @@ export default function DevicesPage(){
     try{await api.approvePosRegistration(request.request_id,{branch_id:String(values.branch_id),terminal_id:String(values.terminal_id).trim()});await loadRequests();if(String(values.branch_id)===String(branchId))await loadDevices(branchId);}catch(err){setError(err?.response?.data?.message||err?.response?.data?.code||'Unable to approve POS registration.');}finally{setBusy('');}
   };
   const reject=async(request)=>{setBusy(request.request_id);setError('');try{await api.rejectPosRegistration(request.request_id);await loadRequests();}catch(err){setError(err?.response?.data?.message||'Unable to reject POS registration.');}finally{setBusy('');}};
+  const createSetup=async(event)=>{
+    event.preventDefault();
+    const branch_id=String(setup.branch_id||branchId||'').trim();
+    const terminal_id=String(setup.terminal_id||'').trim();
+    if(!branch_id||!terminal_id){setError('Choose a store and enter a terminal ID to generate a setup code.');return;}
+    setBusy('setup-code');setError('');
+    try{
+      const r=await api.createPosSetupCode({branch_id,terminal_id});
+      const body=unwrap(r);
+      setSetupCode(body);
+      setSetup({branch_id,terminal_id:''});
+      await loadRequests();
+    }catch(err){setError(err?.response?.data?.message||err?.response?.data?.code||'Unable to create POS setup code.');}
+    finally{setBusy('');}
+  };
 
   return <div className="page-stack">
-    <PageHeader title="POS & Devices" subtitle="Approve physical POS registration requests, assign stores and monitor active terminals." action={<button className="secondary-btn" onClick={loadRequests}><i className="bi bi-arrow-clockwise"/> Refresh requests</button>}/>
+    <PageHeader title="POS Setup & Approvals" subtitle="Approve physical POS registration requests, assign stores and monitor active terminals." action={<button className="secondary-btn" onClick={loadRequests}><i className="bi bi-arrow-clockwise"/> Refresh requests</button>}/>
+
+    <section className="panel">
+      <div className="section-heading"><div><h2>Generate POS setup code</h2><p>Create a short one-time code for a new physical POS. The POS enters this code once and stores its approved device identity locally.</p></div><span className="status-badge status-live compact">15 min</span></div>
+      <form className="form-grid three-col" onSubmit={createSetup}>
+        <label className="field"><span>Store</span><select value={setup.branch_id||branchId} onChange={e=>setSetup(prev=>({...prev,branch_id:e.target.value}))}><option value="">Select branch</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name||b.branch_name||b.id}</option>)}</select></label>
+        <label className="field"><span>Terminal ID</span><input value={setup.terminal_id} onChange={e=>setSetup(prev=>({...prev,terminal_id:e.target.value}))} placeholder="POS-01"/></label>
+        <div className="form-actions"><button className="primary-btn" type="submit" disabled={busy==='setup-code'}><i className="bi bi-key"/> {busy==='setup-code'?'Generating...':'Generate setup code'}</button></div>
+      </form>
+      {setupCode&&<div className="state-card good"><div><strong>Setup code</strong><span>Enter this on the new POS. It expires at {setupCode.expires_at?new Date(setupCode.expires_at).toLocaleTimeString():'soon'}.</span></div><code className="setup-code">{setupCode.setup_code}</code></div>}
+    </section>
 
     <section className="panel">
       <div className="section-heading"><div><h2>Pending registration requests</h2><p>A POS can request access, but only a tenant admin can choose its store and terminal identity.</p></div><span className="status-badge status-live compact">{requests.length} pending</span></div>

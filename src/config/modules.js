@@ -2,11 +2,12 @@ export const moduleGroups = [
   { label: 'Operate', items: [
     { path: '/', label: 'Overview', icon: 'bi-grid-1x2', status: 'live' },
     { path: '/stores', label: 'Stores & Branches', icon: 'bi-shop', status: 'live' },
-    { path: '/devices', label: 'POS & Devices', icon: 'bi-pc-display-horizontal', status: 'live' },
+    { path: '/pos-setup', label: 'POS Setup & Approvals', icon: 'bi-pc-display-horizontal', status: 'live' },
     { path: '/offline-sync', label: 'Offline & Sync', icon: 'bi-arrow-repeat', status: 'partial' }
   ]},
   { label: 'Manage', items: [
     { path: '/customers', label: 'Customers', icon: 'bi-people', status: 'live' },
+    { path: '/orders', label: 'Orders', icon: 'bi-bag-check', status: 'contract' },
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
   ]},
   { label: 'Finance', items: [
