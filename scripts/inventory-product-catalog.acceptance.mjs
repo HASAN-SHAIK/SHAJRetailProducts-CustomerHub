@@ -16,7 +16,14 @@ requireText(inventoryApi, "centralApi.get('/v1/categories'", 'Product category f
 requireText(page, 'Central product master', 'Product master authority must be explicit.');
 requireText(page, 'Store / branch', 'Product catalog must expose branch scope.');
 requireText(page, 'Product, brand/company or barcode', 'Product catalog must expose useful product search.');
+requireText(page, 'product.inventory', 'Product catalog must consume the Central per-product inventory projection.');
+requireText(page, 'projected_net_quantity', 'Product catalog must present canonical projected net stock.');
+requireText(page, 'sellable_quantity', 'Product catalog must present canonical sellable stock.');
+requireText(page, 'physical_quantity', 'Product catalog must present canonical physical stock.');
+requireText(page, 'expired_quantity', 'Product catalog must expose expiry-aware stock facts.');
+requireText(page, 'provisional_deficit', 'Product catalog must expose provisional offline deficits.');
 requireText(page, 'Batch tracked', 'Batch-managed products must be distinguished from simple stock products.');
+requireText(page, 'Batch stock never falls back to `products.stock_quantity`', 'Batch stock must not fall back to the product master quantity.');
 requireText(page, 'Inventory truth boundary', 'Product catalog must state the canonical inventory truth boundary.');
 requireText(page, 'Page {meta.page} of {meta.total_pages}', 'Product catalog must expose server-backed pagination.');
 if (page.includes('posApi') || page.includes('localStorage') || page.includes('indexedDB')) {
