@@ -5,6 +5,7 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 
 const app = read('src/App.jsx');
 const api = read('src/lib/inventoryApi.js');
+const policies = read('src/pages/InventoryPoliciesPage.jsx');
 const pkg = JSON.parse(read('package.json'));
 const workflow = read('.github/workflows/ci.yml');
 
@@ -19,7 +20,9 @@ const requiredRoutes = [
   'analytics/inventory',
 ];
 for (const route of requiredRoutes) assert(app.includes(`path="${route}"`), `Missing Inventory V1 route: ${route}`);
-assert(app.includes('<ConfigurationPage kind="inventory" />'), 'Inventory Policies must remain on the canonical configuration engine.');
+assert(app.includes('path="inventory" element={<InventoryPoliciesPage />}'), 'Inventory Policies route must remain wired through the certified workspace.');
+assert(policies.includes('<ConfigurationPage kind="inventory" />'), 'Inventory Policies must remain on the canonical configuration engine.');
+assert(policies.includes('System → Business → Store → POS'), 'Inventory Policies must preserve the effective-configuration inheritance boundary.');
 
 const requiredApiContracts = [
   "centralApi.get('/v1/products'",
