@@ -23,7 +23,8 @@ requireText(page, 'physical_quantity', 'Product catalog must present canonical p
 requireText(page, 'expired_quantity', 'Product catalog must expose expiry-aware stock facts.');
 requireText(page, 'provisional_deficit', 'Product catalog must expose provisional offline deficits.');
 requireText(page, 'Batch tracked', 'Batch-managed products must be distinguished from simple stock products.');
-requireText(page, 'Batch stock never falls back to `products.stock_quantity`', 'Batch stock must not fall back to the product master quantity.');
+requireText(page, 'Product master editing does not directly mutate stock', 'Product master editing must not become an inventory quantity authority.');
+requireText(page, 'purchases and audited stock operations own quantity changes', 'Quantity changes must stay with canonical purchase/audited inventory flows.');
 requireText(page, 'Inventory truth boundary', 'Product catalog must state the canonical inventory truth boundary.');
 requireText(page, 'Page {meta.page} of {meta.total_pages}', 'Product catalog must expose server-backed pagination.');
 if (page.includes('posApi') || page.includes('localStorage') || page.includes('indexedDB')) {
