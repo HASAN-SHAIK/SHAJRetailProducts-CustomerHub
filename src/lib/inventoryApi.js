@@ -35,4 +35,11 @@ export const inventoryApi = {
     params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, purchase_id: purchaseId || undefined, limit },
   }),
   createPurchaseReturn: (payload) => centralApi.post('/v1/purchase-returns', payload),
+  batches: ({ branchId = '' } = {}) => centralApi.get('/batches', {
+    params: { branch_id: branchId || undefined },
+  }),
+  branchStock: ({ productId, branchId = '' } = {}) => centralApi.get('/stock', {
+    params: { product_id: productId, branch_id: branchId || undefined },
+  }),
+  adjustStock: (payload) => centralApi.post('/stock/adjustments', payload),
 };
