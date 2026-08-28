@@ -19,4 +19,11 @@ export const inventoryApi = {
   categories: ({ search = '', page = 1, limit = 200 } = {}) => centralApi.get('/v1/categories', {
     params: { search: search || undefined, page, limit },
   }),
+  suppliers: ({ search = '', page = 1, limit = 50, sortBy = 'name', sortOrder = 'asc' } = {}) => centralApi.get('/v1/suppliers', {
+    params: { search: search || undefined, page, limit, sort_by: sortBy, sort_order: sortOrder },
+  }),
+  supplier: (supplierId) => centralApi.get(`/v1/suppliers/${encodeURIComponent(String(supplierId))}`),
+  createSupplier: (payload) => centralApi.post('/v1/suppliers', payload),
+  updateSupplier: (supplierId, payload) => centralApi.put(`/v1/suppliers/${encodeURIComponent(String(supplierId))}`, payload),
+  deleteSupplier: (supplierId) => centralApi.delete(`/v1/suppliers/${encodeURIComponent(String(supplierId))}`),
 };
