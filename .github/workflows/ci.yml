@@ -20,4 +20,5 @@ jobs:
       - run: npm run test:staff
       - run: npm run test:expenses
       - run: npm run test:accounts
+      - run: npm run test:inventory-catalog
       - run: npm run build
