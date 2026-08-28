@@ -19,10 +19,8 @@ export const centralApi = axios.create({ baseURL: CENTRAL_API_URL, withCredentia
 export const posApi = axios.create({ baseURL: POS_SERVICE_URL, timeout: 5000 });
 
 centralApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
   config.headers = config.headers || {};
   config.headers['x-device-id'] = getDeviceId();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -40,14 +38,13 @@ centralApi.interceptors.response.use(
     if (error?.response?.status !== 401 || original?._hubRetried || String(original?.url || '').includes('/auth/')) throw error;
     original._hubRetried = true;
     refreshPromise ||= centralApi.post('/auth/refresh').finally(() => { refreshPromise = null; });
-    const refresh = await refreshPromise;
-    if (refresh?.data?.token) {
-      setAccessToken(refresh.data.token);
+    await refreshPromise;
+    const token = getAccessToken();
+    if (token) {
       original.headers = original.headers || {};
-      original.headers.Authorization = `Bearer ${refresh.data.token}`;
-      return centralApi(original);
+      original.headers.Authorization = `Bearer ${token}`;
     }
-    throw error;
+    return centralApi(original);
   }
 );
 
@@ -96,6 +93,15 @@ export const api = {
 
   staff: ({ search = '', status = '', branchId = '' } = {}) => centralApi.get('/v1/staff', {
     params: { search: search || undefined, status: status || undefined, branch_id: branchId || undefined },
+  }),
+  staffSalaries: ({ month = '', staffId = '', branchId = '' } = {}) => centralApi.get('/v1/staff/salary', {
+    params: { month: month || undefined, staff_id: staffId || undefined, branch_id: branchId || undefined },
+  }),
+  createStaffSalary: (payload) => centralApi.post('/v1/staff/salary', payload),
+  updateStaffSalary: (salaryId, payload) => centralApi.put(`/v1/staff/salary/${encodeURIComponent(String(salaryId))}`, payload),
+  deleteStaffSalary: (salaryId) => centralApi.delete(`/v1/staff/salary/${encodeURIComponent(String(salaryId))}`),
+  staffPerformance: ({ month = '', from = '', to = '', branchId = '' } = {}) => centralApi.get('/v1/staff/performance', {
+    params: { month: month || undefined, from: from || undefined, to: to || undefined, branch_id: branchId || undefined },
   }),
   staffMember: (staffId) => centralApi.get(`/v1/staff/${encodeURIComponent(String(staffId))}`),
   createStaff: (payload) => centralApi.post('/v1/staff', payload),

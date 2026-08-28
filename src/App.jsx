@@ -41,7 +41,14 @@ const implementedPaths = new Set([
   '/customers',
   '/orders',
   '/staff',
+  '/staff/new',
+  '/staff/edit',
+  '/staff/salary',
+  '/staff/branch-assignment',
+  '/staff/roles-status',
   '/finance/expenses',
+  '/staff/expenses',
+  '/staff/performance',
   '/finance/accounts',
   '/business',
   '/stores',
@@ -86,13 +93,20 @@ export default function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="staff" element={<StaffPage />} />
+        <Route path="staff/new" element={<StaffPage mode="new" />} />
+        <Route path="staff/edit" element={<StaffPage mode="edit" />} />
+        <Route path="staff/salary" element={<StaffPage mode="salary" />} />
+        <Route path="staff/branch-assignment" element={<StaffPage mode="branch-assignment" />} />
+        <Route path="staff/roles-status" element={<StaffPage mode="roles-status" />} />
+        <Route path="staff/expenses" element={<StaffPage mode="expenses" />} />
+        <Route path="staff/performance" element={<StaffPage mode="performance" />} />
         <Route path="finance/expenses" element={<ExpensesPage />} />
         <Route path="finance/accounts" element={<AccountsPage />} />
         <Route path="business" element={<BusinessPage />} />
         <Route path="stores" element={<StoresPage />} />
         <Route path="pos-setup" element={<DevicesPage />} />
         <Route path="devices" element={<Navigate to="/pos-setup" replace />} />
-        <Route path="stores-pos/registered-devices" element={<DevicesPage />} />
+        <Route path="stores-pos/registered-devices" element={<Navigate to="/pos-setup" replace />} />
         <Route path="offline-sync" element={<OfflineSyncPage />} />
         <Route path="offline-policies" element={<ConfigurationPage kind="offline" />} />
         <Route path="hardware" element={<ConfigurationPage kind="hardware" />} />

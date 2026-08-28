@@ -535,7 +535,7 @@ body[data-theme="light"] {
 
 .customerhub-shell .hub-content {
   max-width: none;
-  padding: 0 28px 34px;
+  padding: 22px 28px 34px;
 }
 
 .online-dot {
@@ -959,7 +959,7 @@ body[data-theme="light"] {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1068px;
+  max-width: none;
 }
 
 .staff-page-header {
@@ -1217,6 +1217,11 @@ body[data-theme="light"] {
   gap: 6px;
 }
 
+.staff-action-note {
+  color: #6b7280;
+  font-size: 11px;
+}
+
 .staff-actions .icon-btn {
   width: 26px;
   height: 26px;
@@ -1234,6 +1239,12 @@ body[data-theme="light"] {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
+}
+
+.staff-summary-grid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
 }
 
 .staff-summary-card {
@@ -1267,8 +1278,134 @@ body[data-theme="light"] {
   margin-top: 2px;
 }
 
+.staff-workflow-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.staff-workflow-grid.narrow {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.staff-workflow-form {
+  margin-top: 16px;
+}
+
+.staff-payroll-preview {
+  align-self: end;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 12px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #f8fafb;
+}
+
+.staff-payroll-preview span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.staff-payroll-preview strong {
+  color: #111827;
+  font-size: 13px;
+  text-align: right;
+}
+
+.staff-list-panel,
+.staff-assignment-panel {
+  min-width: 0;
+}
+
+.staff-picker-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.staff-picker-list button {
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #1f2933;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.staff-picker-list button.active,
+.staff-picker-list button:hover {
+  border-color: #bfe9e1;
+  background: #f0fbf8;
+}
+
+.staff-picker-list span,
+.assignment-row span {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.assignment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.assignment-grid h3 {
+  margin: 0 0 10px;
+  color: #1f2933;
+  font-size: 13px;
+}
+
+.assignment-row {
+  min-height: 62px;
+  border-top: 1px solid #edf0f2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.assignment-row strong {
+  display: block;
+  color: #111827;
+  font-size: 12px;
+}
+
+.assignment-row select {
+  min-width: 0;
+}
+
+.link-action {
+  border: 0;
+  background: transparent;
+  color: #087f6f;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.staff-inline-alert.success {
+  border-color: #bfe9e1;
+  background: #f0fbf8;
+}
+
 @media (max-width: 1020px) {
   .staff-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-workflow-grid,
+  .staff-workflow-grid.narrow,
+  .assignment-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1285,6 +1422,11 @@ body[data-theme="light"] {
 @media (max-width: 640px) {
   .staff-page-header {
     align-items: stretch;
+  }
+
+  .assignment-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .staff-segments {
@@ -2051,6 +2193,38 @@ body[data-theme="light"] {
   background: #fff;
   color: #111827;
   font-size: 11px;
+}
+
+.customerhub-shell .staff-management-screen select,
+.customerhub-shell .staff-management-screen .field select,
+.customerhub-shell .staff-management-screen .form-grid label select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border-radius: 7px;
+  border: 1px solid #e5e7eb;
+  background-color: #fff;
+  color: #111827;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 0 34px 0 10px;
+  outline: 0;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.customerhub-shell .staff-management-screen select:focus {
+  border-color: #9ddbd2;
+  box-shadow: 0 0 0 3px rgba(0, 155, 125, .10);
+}
+
+.customerhub-shell .staff-management-screen select:disabled {
+  background-color: #f8fafb;
+  color: #9ca3af;
+  cursor: not-allowed;
 }
 
 .span-2 {

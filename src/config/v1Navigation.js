@@ -22,7 +22,6 @@ export const v1Sections = [
     items: [
       { path: '/stores', label: 'Stores & Branches', status: 'live' },
       { path: '/pos-setup', label: 'POS Setup & Approvals', status: 'live' },
-      { path: '/stores-pos/registered-devices', label: 'Registered Devices', status: 'live' },
       { path: '/stores-pos/device-diagnostics', label: 'Device Diagnostics', status: 'contract' },
       { path: '/offline-sync', label: 'Offline & Sync', status: 'partial' },
       { path: '/stores-pos/sync-backlog', label: 'Sync Backlog', status: 'contract' },
@@ -88,11 +87,11 @@ export const v1Sections = [
       { path: '/staff', label: 'Staff List', status: 'live' },
       { path: '/staff/new', label: 'Add Staff', status: 'live' },
       { path: '/staff/edit', label: 'Edit Staff', status: 'live' },
-      { path: '/staff/salary', label: 'Salary Tracking', status: 'contract' },
+      { path: '/staff/salary', label: 'Salary Tracking', status: 'live' },
       { path: '/staff/branch-assignment', label: 'Branch Assignment', status: 'live' },
       { path: '/staff/roles-status', label: 'Role / Status Management', status: 'live' },
       { path: '/staff/expenses', label: 'Staff-wise Expenses', status: 'live' },
-      { path: '/staff/performance', label: 'Staff Performance', status: 'partial' },
+      { path: '/staff/performance', label: 'Staff Performance', status: 'live' },
     ],
   },
   {
