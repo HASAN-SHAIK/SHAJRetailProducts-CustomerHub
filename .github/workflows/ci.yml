@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, agent/retail-hub-v1]
   pull_request:
-    branches: [main, inventory/product-catalog-v1]
+    branches: [main, inventory/product-catalog-v1, inventory/product-editor-v1]
 
 jobs:
   build:
@@ -22,4 +22,5 @@ jobs:
       - run: npm run test:accounts
       - run: npm run test:inventory-catalog
       - run: npm run test:inventory-editor
+      - run: npm run test:inventory-suppliers
       - run: npm run build
