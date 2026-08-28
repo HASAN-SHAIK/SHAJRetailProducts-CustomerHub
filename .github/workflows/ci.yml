@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, agent/retail-hub-v1]
   pull_request:
-    branches: [main]
+    branches: [main, inventory/product-catalog-v1]
 
 jobs:
   build:
