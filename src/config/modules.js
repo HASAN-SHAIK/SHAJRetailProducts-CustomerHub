@@ -10,6 +10,7 @@ export const moduleGroups = [
     { path: '/inventory/suppliers', label: 'Suppliers', icon: 'bi-truck', status: 'live' },
     { path: '/inventory/purchases/new', label: 'Purchase Entry', icon: 'bi-receipt-cutoff', status: 'live' },
     { path: '/inventory/purchases', label: 'Purchase Book', icon: 'bi-journal-text', status: 'live' },
+    { path: '/inventory/purchase-returns', label: 'Purchase Returns', icon: 'bi-arrow-counterclockwise', status: 'live' },
     { path: '/customers', label: 'Customers', icon: 'bi-people', status: 'live' },
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
   ]},
