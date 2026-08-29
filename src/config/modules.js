@@ -8,6 +8,7 @@ export const moduleGroups = [
   { label: 'Manage', items: [
     { path: '/inventory/catalog', label: 'Inventory', icon: 'bi-boxes', status: 'live' },
     { path: '/inventory/suppliers', label: 'Suppliers', icon: 'bi-truck', status: 'live' },
+    { path: '/inventory/purchases/new', label: 'Purchase Entry', icon: 'bi-receipt-cutoff', status: 'live' },
     { path: '/customers', label: 'Customers', icon: 'bi-people', status: 'live' },
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
   ]},
