@@ -23,4 +23,5 @@ jobs:
       - run: npm run test:inventory-catalog
       - run: npm run test:inventory-editor
       - run: npm run test:inventory-suppliers
+      - run: npm run test:inventory-purchase-entry
       - run: npm run build
