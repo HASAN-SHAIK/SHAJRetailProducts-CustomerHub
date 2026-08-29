@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, agent/retail-hub-v1]
   pull_request:
-    branches: [main]
+    branches: [main, inventory/product-catalog-v1, inventory/product-editor-v1, inventory/suppliers-v1, inventory/purchase-entry-v1, inventory/purchase-book-v1, inventory/purchase-returns-v1, inventory/stock-adjustments-v1, inventory/analytics-v1, inventory/policies-v1]
 
 jobs:
   build:
@@ -20,4 +20,14 @@ jobs:
       - run: npm run test:staff
       - run: npm run test:expenses
       - run: npm run test:accounts
+      - run: npm run test:inventory-catalog
+      - run: npm run test:inventory-editor
+      - run: npm run test:inventory-suppliers
+      - run: npm run test:inventory-purchase-entry
+      - run: npm run test:inventory-purchase-book
+      - run: npm run test:inventory-purchase-returns
+      - run: npm run test:inventory-stock-adjustments
+      - run: npm run test:inventory-analytics
+      - run: npm run test:inventory-policies
+      - run: npm run test:inventory-release
       - run: npm run build

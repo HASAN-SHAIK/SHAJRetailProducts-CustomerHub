@@ -6,6 +6,12 @@ export const moduleGroups = [
     { path: '/offline-sync', label: 'Offline & Sync', icon: 'bi-arrow-repeat', status: 'partial' }
   ]},
   { label: 'Manage', items: [
+    { path: '/inventory/catalog', label: 'Inventory', icon: 'bi-boxes', status: 'live' },
+    { path: '/inventory/suppliers', label: 'Suppliers', icon: 'bi-truck', status: 'live' },
+    { path: '/inventory/purchases/new', label: 'Purchase Entry', icon: 'bi-receipt-cutoff', status: 'live' },
+    { path: '/inventory/purchases', label: 'Purchase Book', icon: 'bi-journal-text', status: 'live' },
+    { path: '/inventory/purchase-returns', label: 'Purchase Returns', icon: 'bi-arrow-counterclockwise', status: 'live' },
+    { path: '/inventory/stock-adjustments', label: 'Stock Adjustments', icon: 'bi-sliders', status: 'live' },
     { path: '/customers', label: 'Customers', icon: 'bi-people', status: 'live' },
     { path: '/orders', label: 'Orders', icon: 'bi-bag-check', status: 'contract' },
     { path: '/staff', label: 'Staff', icon: 'bi-person-badge', status: 'live' }
