@@ -148,8 +148,8 @@ export function ProductCatalogPage() {
       <div className="table-wrap"><table><thead><tr><th>Product</th><th>Company</th><th>Category</th><th>Barcode</th><th>Stock</th><th>Purchase</th><th>Selling</th><th>GST</th></tr></thead><tbody>
         {products.map((row) => <tr key={productId(row)}>
           <td><strong>{productName(row)}</strong></td>
-          <td>{row.company || '-'}</td>
-          <td>{row.category || '-'}</td>
+          <td>{fieldValue(row, ['company', 'company_name'], '-')}</td>
+          <td>{fieldValue(row, ['category', 'category_name'], '-')}</td>
           <td>{row.barcode || '-'}</td>
           <td>{fieldValue(row, ['stock_quantity', 'branch_stock_quantity', 'quantity'], 0)}</td>
           <td>{money(row.purchase_price)}</td>
@@ -341,6 +341,17 @@ export function PurchaseEntryPage() {
     qty: 'quantity',
     quantity: 'quantity',
     stock: 'quantity',
+    stockquantity: 'quantity',
+    stockqty: 'quantity',
+    openingstock: 'quantity',
+    openingquantity: 'quantity',
+    openingqty: 'quantity',
+    currentstock: 'quantity',
+    currentquantity: 'quantity',
+    currentqty: 'quantity',
+    availablestock: 'quantity',
+    availablequantity: 'quantity',
+    availableqty: 'quantity',
     purchaseprice: 'purchase_price',
     costprice: 'purchase_price',
     rate: 'purchase_price',
@@ -384,7 +395,7 @@ export function PurchaseEntryPage() {
       name: source.name || (product ? productName(product) : ''),
       company: source.company || product?.company || '',
       category: source.category || product?.category || '',
-      quantity: Number(toNumber(source.quantity, 1) || 1),
+      quantity: Number(toNumber(source.quantity ?? source.stock_quantity, 1) || 1),
       purchase_price: Number(toNumber(source.purchase_price, product?.purchase_price || 0) || 0),
       selling_price: Number(toNumber(source.selling_price, product?.selling_price || source.purchase_price || 0) || 0),
       mrp: toNumber(source.mrp, ''),

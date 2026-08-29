@@ -3627,3 +3627,159 @@ body[data-theme="light"] {
     padding: 14px;
   }
 }
+
+/* CustomerHub readability scale */
+.customerhub-shell {
+  font-size: 16px;
+}
+
+.customerhub-shell .hub-content :where(p, li, label, input, select, textarea, button, a, td, th, span, small, dt, dd, code, b, strong) {
+  font-size: max(16px, 1em);
+}
+
+.customerhub-shell .hub-content :where(small, th, code) {
+  font-size: max(14px, 1em);
+}
+
+.customerhub-shell .hub-content :where(h1) {
+  font-size: max(30px, 1em);
+}
+
+.customerhub-shell .hub-content :where(h2) {
+  font-size: max(22px, 1em);
+}
+
+.customerhub-shell .hub-content :where(h3) {
+  font-size: max(20px, 1em);
+}
+
+.customerhub-shell .brand-row strong,
+.customerhub-shell .topbar-title strong,
+.v1-top-nav-item,
+.v1-section-nav-item,
+.customerhub-shell .nav-item,
+.customerhub-shell .secondary-btn,
+.customerhub-shell .primary-btn,
+.customerhub-shell .danger-btn,
+.customerhub-shell .icon-btn,
+.section-back,
+.section-nav-item,
+.launch-suggestion strong,
+.launch-card strong,
+.launch-detail-card strong,
+.brief-copy strong,
+.brief-attention strong,
+.card-heading h2,
+.staff-page-header p,
+.staff-table,
+.staff-member-cell strong,
+.sales-meter strong,
+.activity-status,
+.customer-table,
+.customer-name-cell strong,
+.profile-tabs button,
+.ai-copy p,
+.ai-copy h2,
+.customer-card h2,
+.side-panel h2,
+.purchase-row,
+.points-row,
+.finance-list-row strong,
+.payment-row strong,
+.expense-page-header p,
+.expense-card-heading p,
+.expense-table-wrap table,
+.expense-side-card span {
+  font-size: 15px;
+}
+
+.v1-top-nav-item i,
+.v1-section-nav-item small,
+.customerhub-shell .nav-item i,
+.customerhub-shell .brand-row span,
+.customerhub-shell .sidebar-footer small,
+.topbar-title span,
+.chart-legend,
+.brief-attention li,
+.staff-role-filter span,
+.staff-segments button,
+.staff-table th,
+.staff-member-cell small,
+.purchase-row div span,
+.completed-pill,
+.ai-signal-grid span,
+.customer-card-head button,
+.side-panel-head button,
+.loyalty-panel p,
+.offer-card span,
+.customer-facts dt,
+.customer-facts dd,
+.finance-list-row span,
+.payment-row span,
+.finance-axis text,
+.expense-filters label,
+.expense-boundary-note,
+.recent-expenses-head .text-link,
+.expense-table-wrap th,
+.expense-category,
+.expense-status {
+  font-size: 14px;
+}
+
+.overview-title h1,
+.staff-page-header h1,
+.expense-page-header h1 {
+  font-size: 30px;
+}
+
+.overview-title p,
+.brief-copy p,
+.card-heading p,
+.activity-row p,
+.customer-profile-subtitle,
+.notes-panel blockquote,
+.notes-panel p,
+.finance-card h2,
+.expense-card-heading h2,
+.recent-expenses-head h2,
+.category-summary strong,
+.compliance-card strong {
+  font-size: 17px;
+}
+
+.overview-kpi strong,
+.customer-metric strong,
+.finance-kpi strong,
+.expense-side-card strong {
+  font-size: 32px;
+}
+
+.topbar-search input,
+.staff-search input,
+.staff-role-filter select,
+.expense-filters select,
+.recent-search input,
+.field input,
+.field select,
+.field textarea,
+.text-input {
+  font-size: 15px;
+}
+
+.customerhub-shell .secondary-btn,
+.customerhub-shell .primary-btn,
+.customerhub-shell .danger-btn,
+.v1-top-nav-item,
+.v1-section-nav-item {
+  min-height: 38px;
+}
+
+.customerhub-shell .hub-content,
+.brief-copy p,
+.activity-row p,
+.ai-copy p,
+.notes-panel blockquote,
+.notes-panel p,
+.expense-boundary-note {
+  line-height: 1.6;
+}
