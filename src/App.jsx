@@ -24,6 +24,14 @@ import DevicesPage from './pages/DevicesPage.jsx';
 import OfflineSyncPage from './pages/OfflineSyncPage.jsx';
 import ConfigurationPage from './pages/ConfigurationPage.jsx';
 import ConfigurationAuditPage from './pages/ConfigurationAuditPage.jsx';
+import {
+  ProductCatalogPage,
+  ProductFormPage,
+  PurchaseBookPage,
+  PurchaseEntryPage,
+  PurchaseReturnsPage,
+  SuppliersPage,
+} from './pages/InventoryPages.jsx';
 import GenericModulePage from './pages/GenericModulePage.jsx';
 import V1FeaturePage from './pages/V1FeaturePage.jsx';
 import './styles/users.css';
@@ -40,6 +48,10 @@ const implementedPaths = new Set([
   '/analytics/smart-insights',
   '/customers',
   '/orders',
+  '/orders/sales',
+  '/orders/purchases',
+  '/sales/order-detail',
+  '/sales/returns-summary',
   '/staff',
   '/staff/new',
   '/staff/edit',
@@ -61,6 +73,13 @@ const implementedPaths = new Set([
   '/tax',
   '/billing',
   '/inventory',
+  '/inventory/catalog',
+  '/inventory/products/new',
+  '/inventory/purchase',
+  '/inventory/purchases',
+  '/inventory/purchase-returns',
+  '/inventory/suppliers',
+  '/inventory/suppliers/new',
   '/inventory/policies',
   '/users',
   '/payments',
@@ -92,6 +111,10 @@ export default function App() {
         <Route path="analytics/smart-insights" element={<SmartInsightsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/sales" element={<OrdersPage mode="sales" />} />
+        <Route path="orders/purchases" element={<PurchaseBookPage />} />
+        <Route path="sales/order-detail" element={<OrdersPage mode="detail" />} />
+        <Route path="sales/returns-summary" element={<OrdersPage mode="returns" />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="staff/new" element={<StaffPage mode="new" />} />
         <Route path="staff/edit" element={<StaffPage mode="edit" />} />
@@ -113,7 +136,14 @@ export default function App() {
         <Route path="receipts" element={<ConfigurationPage kind="receipts" />} />
         <Route path="tax" element={<ConfigurationPage kind="tax" />} />
         <Route path="billing" element={<ConfigurationPage kind="billing" />} />
-        <Route path="inventory" element={<Navigate to="/inventory/policies" replace />} />
+        <Route path="inventory" element={<Navigate to="/inventory/catalog" replace />} />
+        <Route path="inventory/catalog" element={<ProductCatalogPage />} />
+        <Route path="inventory/products/new" element={<ProductFormPage />} />
+        <Route path="inventory/purchase" element={<PurchaseEntryPage />} />
+        <Route path="inventory/purchases" element={<PurchaseBookPage />} />
+        <Route path="inventory/purchase-returns" element={<PurchaseReturnsPage />} />
+        <Route path="inventory/suppliers" element={<SuppliersPage />} />
+        <Route path="inventory/suppliers/new" element={<SuppliersPage />} />
         <Route path="inventory/policies" element={<ConfigurationPage kind="inventory" />} />
         <Route path="users" element={<UserDirectory />} />
         <Route path="payments" element={<GenericModulePage moduleKey="payments" />} />

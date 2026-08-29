@@ -90,6 +90,35 @@ export const api = {
   customerDetail: (customerId) => centralApi.get(`/v1/customers/${encodeURIComponent(String(customerId))}`),
   createCustomer: (payload) => centralApi.post('/v1/customers', payload),
   updateCustomer: (customerId, payload) => centralApi.put(`/v1/customers/${encodeURIComponent(String(customerId))}`, payload),
+  orders: ({ transactionType = '', search = '', range = 'this_month', page = 1, limit = 50, branchId = '' } = {}) => centralApi.get('/orders', {
+    params: { transaction_type: transactionType || undefined, search: search || undefined, range, page, limit, branch_id: branchId || undefined },
+  }),
+  order: (orderId) => centralApi.get(`/orders/${encodeURIComponent(String(orderId))}`),
+  returns: ({ branchId = '', limit = 100 } = {}) => centralApi.get('/returns', {
+    params: { branch_id: branchId || undefined, limit },
+  }),
+
+  products: ({ search = '', page = 1, limit = 100, branchId = '' } = {}) => centralApi.get('/products', {
+    params: { search: search || undefined, page, limit, branch_id: branchId || undefined },
+  }),
+  product: (productId) => centralApi.get(`/products/${encodeURIComponent(String(productId))}`),
+  createProduct: (payload) => centralApi.post('/products', payload),
+  updateProduct: (productId, payload) => centralApi.put(`/products/${encodeURIComponent(String(productId))}`, payload),
+  deleteProduct: (productId) => centralApi.delete(`/products/${encodeURIComponent(String(productId))}`),
+  suppliers: ({ search = '', branchId = '', limit = 200 } = {}) => centralApi.get('/suppliers', {
+    params: { search: search || undefined, branch_id: branchId || undefined, limit },
+  }),
+  createSupplier: (payload) => centralApi.post('/suppliers', payload),
+  updateSupplier: (supplierId, payload) => centralApi.put(`/suppliers/${encodeURIComponent(String(supplierId))}`, payload),
+  purchases: ({ branchId = '', supplierId = '', limit = 100 } = {}) => centralApi.get('/purchases', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, limit },
+  }),
+  purchase: (purchaseId) => centralApi.get(`/purchases/${encodeURIComponent(String(purchaseId))}`),
+  createPurchase: (payload) => centralApi.post('/purchases', payload),
+  purchaseReturns: ({ branchId = '', supplierId = '', purchaseId = '', limit = 100 } = {}) => centralApi.get('/purchase-returns', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, purchase_id: purchaseId || undefined, limit },
+  }),
+  createPurchaseReturn: (payload) => centralApi.post('/purchase-returns', payload),
 
   staff: ({ search = '', status = '', branchId = '' } = {}) => centralApi.get('/v1/staff', {
     params: { search: search || undefined, status: status || undefined, branch_id: branchId || undefined },
