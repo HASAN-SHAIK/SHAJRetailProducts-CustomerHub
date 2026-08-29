@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getAccessToken, setAccessToken } from '../lib/api';
+import { api, setAccessToken } from '../lib/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(Boolean(getAccessToken()));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getAccessToken()) return;
+    setAccessToken(null);
     api.session()
       .then((response) => setUser(response?.data?.user || response?.data?.data?.user || null))
       .catch(() => { setAccessToken(null); setUser(null); })
@@ -16,9 +16,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async ({ email, password }) => {
+    setAccessToken(null);
     const response = await api.login({ email, password });
     const body = response?.data?.data ?? response?.data ?? {};
-    if (body.token) setAccessToken(body.token);
+    setAccessToken(body.token || null);
     const nextUser = body.user || null;
     setUser(nextUser);
     return nextUser;

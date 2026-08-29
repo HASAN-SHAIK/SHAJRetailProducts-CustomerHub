@@ -24,6 +24,8 @@
 
 System defaults -> Tenant / Business -> Branch / Store -> POS / Device -> Effective configuration.
 
+Branch payloads include `store_number` as the business-facing store identity. CustomerHub must send `store_number` when creating stores and display it separately from the internal branch UUID.
+
 The configuration response includes a deterministic ETag/hash and per-setting source metadata. Existing tenant-level application settings remain backward-compatible with the Frontend through their current app_settings groups.
 
 ## POSService API consumed now

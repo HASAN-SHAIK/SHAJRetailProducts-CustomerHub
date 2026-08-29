@@ -1,0 +1,185 @@
+export const v1Sections = [
+  {
+    key: 'overview',
+    label: 'Overview',
+    path: '/',
+    icon: 'bi-grid-1x2',
+    items: [
+      { path: '/', label: 'Business Snapshot', status: 'live' },
+      { path: '/analytics/sales', label: 'Sales & Revenue', status: 'live' },
+      { path: '/analytics/profit-growth', label: 'Profit & Growth', status: 'live' },
+      { path: '/analytics/inventory', label: 'Inventory Alerts', status: 'live' },
+      { path: '/analytics/customers-credit', label: 'Customer Credit Alerts', status: 'live' },
+      { path: '/analytics/branches', label: 'Branch Performance', status: 'live' },
+      { path: '/analytics/smart-insights', label: 'Smart Insights', status: 'live' },
+    ],
+  },
+  {
+    key: 'stores-pos',
+    label: 'Stores & POS',
+    path: '/stores',
+    icon: 'bi-shop',
+    items: [
+      { path: '/stores', label: 'Stores & Branches', status: 'live' },
+      { path: '/pos-setup', label: 'POS Setup & Approvals', status: 'live' },
+      { path: '/stores-pos/device-diagnostics', label: 'Device Diagnostics', status: 'contract' },
+      { path: '/offline-sync', label: 'Offline & Sync', status: 'partial' },
+      { path: '/stores-pos/sync-backlog', label: 'Sync Backlog', status: 'contract' },
+      { path: '/stores-pos/backup-recovery', label: 'Local Backup & Recovery', status: 'contract' },
+      { path: '/stores-pos/register-status', label: 'Register / Session Status', status: 'contract' },
+    ],
+  },
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    path: '/inventory/catalog',
+    icon: 'bi-boxes',
+    items: [
+      { path: '/inventory/catalog', label: 'Product Catalog', status: 'contract' },
+      { path: '/inventory/products/new', label: 'Add Product', status: 'contract' },
+      { path: '/inventory/purchase', label: 'Purchase Entry', status: 'contract' },
+      { path: '/inventory/purchases', label: 'Purchase Book', status: 'contract' },
+      { path: '/inventory/purchase-returns', label: 'Purchase Returns', status: 'contract' },
+      { path: '/inventory/suppliers', label: 'Suppliers', status: 'contract' },
+      { path: '/inventory/suppliers/new', label: 'Add Supplier', status: 'contract' },
+      { path: '/analytics/inventory', label: 'Inventory Analytics', status: 'live' },
+      { path: '/inventory/policies', label: 'Inventory Policies', status: 'live' },
+    ],
+  },
+  {
+    key: 'sales',
+    label: 'Sales',
+    path: '/orders',
+    icon: 'bi-bag-check',
+    items: [
+      { path: '/orders', label: 'Orders Overview', status: 'live' },
+      { path: '/orders/sales', label: 'Sales Orders', status: 'live' },
+      { path: '/orders/purchases', label: 'Purchase Orders', status: 'live' },
+      { path: '/sales/order-detail', label: 'Order Detail', status: 'live' },
+      { path: '/analytics/sales', label: 'Revenue Overview', status: 'live' },
+      { path: '/analytics/profit-growth', label: 'Sales Trends', status: 'live' },
+      { path: '/analytics/branches', label: 'Branch Sales', status: 'live' },
+      { path: '/sales/returns-summary', label: 'Returns Summary', status: 'live' },
+    ],
+  },
+  {
+    key: 'customers',
+    label: 'Customers',
+    path: '/customers',
+    icon: 'bi-people',
+    items: [
+      { path: '/customers', label: 'Customer List', status: 'partial' },
+      { path: '/customers/new', label: 'Add Customer', status: 'contract' },
+      { path: '/customers/detail', label: 'Customer Detail', status: 'contract' },
+      { path: '/customers/edit', label: 'Edit Customer', status: 'contract' },
+      { path: '/customers/reorder', label: 'Customer Reorder', status: 'contract' },
+      { path: '/customers/order-history', label: 'Order History', status: 'contract' },
+      { path: '/customers/payment-history', label: 'Payment History', status: 'contract' },
+      { path: '/analytics/customers-credit', label: 'Customer Credit', status: 'live' },
+    ],
+  },
+  {
+    key: 'staff',
+    label: 'Staff',
+    path: '/staff',
+    icon: 'bi-person-badge',
+    items: [
+      { path: '/staff', label: 'Staff List', status: 'live' },
+      { path: '/staff/new', label: 'Add Staff', status: 'live' },
+      { path: '/staff/edit', label: 'Edit Staff', status: 'live' },
+      { path: '/staff/salary', label: 'Salary Tracking', status: 'live' },
+      { path: '/staff/branch-assignment', label: 'Branch Assignment', status: 'live' },
+      { path: '/staff/roles-status', label: 'Role / Status Management', status: 'live' },
+      { path: '/staff/expenses', label: 'Staff-wise Expenses', status: 'live' },
+      { path: '/staff/performance', label: 'Staff Performance', status: 'live' },
+    ],
+  },
+  {
+    key: 'finance',
+    label: 'Finance',
+    path: '/finance/expenses',
+    icon: 'bi-cash-coin',
+    items: [
+      { path: '/finance/expenses', label: 'Expense Dashboard', status: 'live' },
+      { path: '/finance/expenses/new', label: 'Add Expense', status: 'live' },
+      { path: '/finance/expenses/history', label: 'Expense History', status: 'live' },
+      { path: '/finance/expenses/daily', label: 'Daily Expense Report', status: 'live' },
+      { path: '/finance/expenses/monthly', label: 'Monthly Expense Report', status: 'live' },
+      { path: '/finance/accounts', label: 'Accounts', status: 'live' },
+      { path: '/finance/accounts/receipt', label: 'Receipt Entry', status: 'live' },
+      { path: '/finance/accounts/payment', label: 'Payment Entry', status: 'live' },
+      { path: '/finance/accounts/ledger', label: 'Ledger', status: 'live' },
+      { path: '/finance/accounts/opening', label: 'Opening Setup', status: 'live' },
+    ],
+  },
+  {
+    key: 'reports',
+    label: 'Reports',
+    path: '/reports/daily-sales',
+    icon: 'bi-file-earmark-bar-graph',
+    items: [
+      { path: '/reports/daily-sales', label: 'Daily Sales Report', status: 'contract' },
+      { path: '/reports/historical-sales', label: 'Historical Sales Report', status: 'contract' },
+      { path: '/reports/inventory', label: 'Inventory Report', status: 'live' },
+      { path: '/reports/branch-inventory', label: 'Branch Inventory Report', status: 'contract' },
+      { path: '/reports/customer-outstanding', label: 'Customer Outstanding Report', status: 'live' },
+      { path: '/reports/gst', label: 'GST Report', status: 'contract' },
+      { path: '/reports/data-quality', label: 'Data Quality Report', status: 'contract' },
+      { path: '/reports/profit-loss', label: 'Profit & Loss', status: 'live' },
+      { path: '/reports/balance-sheet', label: 'Balance Sheet', status: 'live' },
+      { path: '/reports/trial-balance', label: 'Trial Balance', status: 'live' },
+    ],
+  },
+  {
+    key: 'compliance',
+    label: 'Compliance',
+    path: '/compliance/returns/new',
+    icon: 'bi-shield-check',
+    items: [
+      { path: '/compliance/returns/new', label: 'Sales Return', status: 'contract' },
+      { path: '/compliance/returns/history', label: 'Return History', status: 'contract' },
+      { path: '/compliance/corrections/edit-bill', label: 'Edit Bill', status: 'contract' },
+      { path: '/compliance/corrections/history', label: 'Correction History', status: 'contract' },
+      { path: '/compliance/tax-reports', label: 'Tax Reports', status: 'contract' },
+      { path: '/compliance/gst-summary', label: 'GST Summary', status: 'contract' },
+      { path: '/compliance/eway-bill', label: 'E-Way Bill', status: 'contract' },
+      { path: '/compliance/gst-filing', label: 'GST Filing Data', status: 'contract' },
+      { path: '/tax', label: 'Tax & GST Settings', status: 'live' },
+    ],
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    path: '/business',
+    icon: 'bi-gear',
+    items: [
+      { path: '/business', label: 'Business Profile', status: 'live' },
+      { path: '/billing', label: 'Billing & Checkout Policies', status: 'live' },
+      { path: '/inventory/policies', label: 'Inventory Policies', status: 'live' },
+      { path: '/offline-policies', label: 'Offline Policies', status: 'live' },
+      { path: '/hardware', label: 'POS Hardware Policies', status: 'live' },
+      { path: '/receipts', label: 'Receipts & Printing', status: 'live' },
+      { path: '/users', label: 'Users & Access', status: 'live' },
+      { path: '/security', label: 'Security & Approvals', status: 'live' },
+      { path: '/audit', label: 'Configuration Audit', status: 'live' },
+      { path: '/payments', label: 'Payments', status: 'contract' },
+      { path: '/integrations', label: 'Integrations', status: 'contract' },
+      { path: '/notifications', label: 'Notifications', status: 'contract' },
+      { path: '/data', label: 'Data & Backup', status: 'contract' },
+    ],
+  },
+];
+
+export const flatV1Items = v1Sections.flatMap((section) =>
+  section.items.map((item) => ({ ...item, sectionKey: section.key, sectionLabel: section.label }))
+);
+
+export const findV1Section = (pathname) => {
+  const path = pathname || '/';
+  const exactItem = flatV1Items.find((item) => item.path === path);
+  if (exactItem) return v1Sections.find((section) => section.key === exactItem.sectionKey);
+  return [...v1Sections]
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((section) => section.path !== '/' && path.startsWith(section.path.split('/').slice(0, 2).join('/')))
+    || v1Sections[0];
+};

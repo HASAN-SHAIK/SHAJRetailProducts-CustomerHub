@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
 import { api } from '../lib/api';
 
+const roleOptions = ['staff', 'cashier', 'manager', 'admin'];
+const titleCase = (value = '') => String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function UserAccessList({ users, branches, reload, busy, setBusy, setMessage }) {
   const branchNames = useMemo(() => Object.fromEntries(branches.map((b)=>[String(b.id),b.name||b.branch_name||b.id])), [branches]);
   const roleChange = async (user, role) => {
@@ -23,7 +26,7 @@ export default function UserAccessList({ users, branches, reload, busy, setBusy,
     const access = user.all_branch_access!==false?'all':String(user.branch_id||'');
     return <div className="user-access-row" key={user.id}>
       <div className="user-identity"><div className="avatar">{String(user.name||user.email||'U').slice(0,1).toUpperCase()}</div><div><strong>{user.name||'Unnamed user'}</strong><span>{user.email}</span></div></div>
-      <label className="field"><span>Role</span><select value={user.role||'staff'} disabled={busy} onChange={(e)=>roleChange(user,e.target.value)}><option value="staff">Staff</option><option value="admin">Administrator</option></select></label>
+      <label className="field"><span>Role</span><select value={user.role||'staff'} disabled={busy} onChange={(e)=>roleChange(user,e.target.value)}>{roleOptions.map((role)=><option key={role} value={role}>{titleCase(role)}</option>)}</select></label>
       <label className="field"><span>Store access</span><select value={user.role==='admin'?'all':access} disabled={busy||user.role==='admin'} onChange={(e)=>accessChange(user,e.target.value)}><option value="all">All stores</option>{branches.map((b)=><option key={b.id} value={b.id}>{b.name||b.branch_name||b.id}</option>)}</select></label>
       <div className="user-meta"><span>{user.all_branch_access!==false?'All stores':branchNames[String(user.branch_id)]||'Branch restricted'}</span><small>Created {user.created_at?new Date(user.created_at).toLocaleDateString():'—'}</small></div>
     </div>;

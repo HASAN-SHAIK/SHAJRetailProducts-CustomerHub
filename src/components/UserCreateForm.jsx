@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
 
-const blank = { name: '', email: '', password: '', role: 'staff', access: 'branch', branch_id: '' };
+const blank = { name: '', email: '', password: '', role: 'cashier', access: 'branch', branch_id: '' };
+const roleOptions = ['cashier', 'manager', 'staff', 'admin'];
+const titleCase = (value = '') => String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 
 export default function UserCreateForm({ branches, onCreated, busy, setBusy, setMessage }) {
   const [form, setForm] = useState(blank);
@@ -29,8 +31,8 @@ export default function UserCreateForm({ branches, onCreated, busy, setBusy, set
       <label className="field"><span>Name</span><input required value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></label>
       <label className="field"><span>Email</span><input required type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})}/></label>
       <label className="field"><span>Temporary password</span><input required minLength={8} type="password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></label>
-      <label className="field"><span>Role</span><select value={form.role} onChange={(e)=>setForm({...form,role:e.target.value})}><option value="staff">Staff</option><option value="admin">Administrator</option></select></label>
-      {form.role==='staff' && <label className="field"><span>Store access</span><select value={form.access==='all'?'all':form.branch_id} onChange={(e)=>setForm({...form,access:e.target.value==='all'?'all':'branch',branch_id:e.target.value==='all'?'':e.target.value})}><option value="all">All stores</option>{branches.map((b)=><option key={b.id} value={b.id}>{b.name||b.branch_name||b.id}</option>)}</select></label>}
+      <label className="field"><span>Role</span><select value={form.role} onChange={(e)=>setForm({...form,role:e.target.value,access:e.target.value==='admin'?'all':form.access})}>{roleOptions.map((role)=><option key={role} value={role}>{titleCase(role)}</option>)}</select></label>
+      {form.role!=='admin' && <label className="field"><span>Store access</span><select value={form.access==='all'?'all':form.branch_id} onChange={(e)=>setForm({...form,access:e.target.value==='all'?'all':'branch',branch_id:e.target.value==='all'?'':e.target.value})}><option value="all">All stores</option>{branches.map((b)=><option key={b.id} value={b.id}>{b.name||b.branch_name||b.id}</option>)}</select></label>}
     </div>
     <div className="form-actions"><span>Backend hashes the password; the Hub never reads it back.</span><button className="primary-btn" disabled={busy}>{busy?'Working…':'Create user'}</button></div>
   </form>;

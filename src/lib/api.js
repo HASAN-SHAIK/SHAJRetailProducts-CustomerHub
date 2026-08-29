@@ -19,10 +19,8 @@ export const centralApi = axios.create({ baseURL: CENTRAL_API_URL, withCredentia
 export const posApi = axios.create({ baseURL: POS_SERVICE_URL, timeout: 5000 });
 
 centralApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
   config.headers = config.headers || {};
   config.headers['x-device-id'] = getDeviceId();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -40,14 +38,13 @@ centralApi.interceptors.response.use(
     if (error?.response?.status !== 401 || original?._hubRetried || String(original?.url || '').includes('/auth/')) throw error;
     original._hubRetried = true;
     refreshPromise ||= centralApi.post('/auth/refresh').finally(() => { refreshPromise = null; });
-    const refresh = await refreshPromise;
-    if (refresh?.data?.token) {
-      setAccessToken(refresh.data.token);
+    await refreshPromise;
+    const token = getAccessToken();
+    if (token) {
       original.headers = original.headers || {};
-      original.headers.Authorization = `Bearer ${refresh.data.token}`;
-      return centralApi(original);
+      original.headers.Authorization = `Bearer ${token}`;
     }
-    throw error;
+    return centralApi(original);
   }
 );
 
@@ -77,6 +74,7 @@ export const api = {
   branchDevices: (branchId) => centralApi.get(`/branches/${branchId}/devices`),
   registerDevice: (branchId, payload) => centralApi.post(`/branches/${branchId}/devices/register`, payload),
   deactivateDevice: (branchId, deviceId) => centralApi.patch(`/branches/${branchId}/devices/${deviceId}/deactivate`),
+  createPosSetupCode: (payload) => centralApi.post('/pos-registration/setup-codes', payload),
   posRegistrationRequests: (status) => centralApi.get('/pos-registration/requests', { params: { status: status || undefined } }),
   approvePosRegistration: (requestId, payload) => centralApi.post(`/pos-registration/requests/${requestId}/approve`, payload),
   rejectPosRegistration: (requestId) => centralApi.post(`/pos-registration/requests/${requestId}/reject`),
@@ -92,9 +90,47 @@ export const api = {
   customerDetail: (customerId) => centralApi.get(`/v1/customers/${encodeURIComponent(String(customerId))}`),
   createCustomer: (payload) => centralApi.post('/v1/customers', payload),
   updateCustomer: (customerId, payload) => centralApi.put(`/v1/customers/${encodeURIComponent(String(customerId))}`, payload),
+  orders: ({ transactionType = '', search = '', range = 'this_month', page = 1, limit = 50, branchId = '' } = {}) => centralApi.get('/orders', {
+    params: { transaction_type: transactionType || undefined, search: search || undefined, range, page, limit, branch_id: branchId || undefined },
+  }),
+  order: (orderId) => centralApi.get(`/orders/${encodeURIComponent(String(orderId))}`),
+  returns: ({ branchId = '', limit = 100 } = {}) => centralApi.get('/returns', {
+    params: { branch_id: branchId || undefined, limit },
+  }),
+
+  products: ({ search = '', page = 1, limit = 100, branchId = '' } = {}) => centralApi.get('/products', {
+    params: { search: search || undefined, page, limit, branch_id: branchId || undefined },
+  }),
+  product: (productId) => centralApi.get(`/products/${encodeURIComponent(String(productId))}`),
+  createProduct: (payload) => centralApi.post('/products', payload),
+  updateProduct: (productId, payload) => centralApi.put(`/products/${encodeURIComponent(String(productId))}`, payload),
+  deleteProduct: (productId) => centralApi.delete(`/products/${encodeURIComponent(String(productId))}`),
+  suppliers: ({ search = '', branchId = '', limit = 200 } = {}) => centralApi.get('/suppliers', {
+    params: { search: search || undefined, branch_id: branchId || undefined, limit },
+  }),
+  createSupplier: (payload) => centralApi.post('/suppliers', payload),
+  updateSupplier: (supplierId, payload) => centralApi.put(`/suppliers/${encodeURIComponent(String(supplierId))}`, payload),
+  purchases: ({ branchId = '', supplierId = '', limit = 100 } = {}) => centralApi.get('/purchases', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, limit },
+  }),
+  purchase: (purchaseId) => centralApi.get(`/purchases/${encodeURIComponent(String(purchaseId))}`),
+  createPurchase: (payload) => centralApi.post('/purchases', payload),
+  purchaseReturns: ({ branchId = '', supplierId = '', purchaseId = '', limit = 100 } = {}) => centralApi.get('/purchase-returns', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, purchase_id: purchaseId || undefined, limit },
+  }),
+  createPurchaseReturn: (payload) => centralApi.post('/purchase-returns', payload),
 
   staff: ({ search = '', status = '', branchId = '' } = {}) => centralApi.get('/v1/staff', {
     params: { search: search || undefined, status: status || undefined, branch_id: branchId || undefined },
+  }),
+  staffSalaries: ({ month = '', staffId = '', branchId = '' } = {}) => centralApi.get('/v1/staff/salary', {
+    params: { month: month || undefined, staff_id: staffId || undefined, branch_id: branchId || undefined },
+  }),
+  createStaffSalary: (payload) => centralApi.post('/v1/staff/salary', payload),
+  updateStaffSalary: (salaryId, payload) => centralApi.put(`/v1/staff/salary/${encodeURIComponent(String(salaryId))}`, payload),
+  deleteStaffSalary: (salaryId) => centralApi.delete(`/v1/staff/salary/${encodeURIComponent(String(salaryId))}`),
+  staffPerformance: ({ month = '', from = '', to = '', branchId = '' } = {}) => centralApi.get('/v1/staff/performance', {
+    params: { month: month || undefined, from: from || undefined, to: to || undefined, branch_id: branchId || undefined },
   }),
   staffMember: (staffId) => centralApi.get(`/v1/staff/${encodeURIComponent(String(staffId))}`),
   createStaff: (payload) => centralApi.post('/v1/staff', payload),
