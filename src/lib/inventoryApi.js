@@ -31,4 +31,15 @@ export const inventoryApi = {
   }),
   purchase: (purchaseId) => centralApi.get(`/v1/purchases/${encodeURIComponent(String(purchaseId))}`),
   createPurchase: (payload) => centralApi.post('/v1/purchases', payload),
+  purchaseReturns: ({ branchId = '', supplierId = '', purchaseId = '', limit = 100 } = {}) => centralApi.get('/v1/purchase-returns', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, purchase_id: purchaseId || undefined, limit },
+  }),
+  createPurchaseReturn: (payload) => centralApi.post('/v1/purchase-returns', payload),
+  batches: ({ branchId = '' } = {}) => centralApi.get('/batches', {
+    params: { branch_id: branchId || undefined },
+  }),
+  branchStock: ({ productId, branchId = '' } = {}) => centralApi.get('/stock', {
+    params: { product_id: productId, branch_id: branchId || undefined },
+  }),
+  adjustStock: (payload) => centralApi.post('/stock/adjustments', payload),
 };
