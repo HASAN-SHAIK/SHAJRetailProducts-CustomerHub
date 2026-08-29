@@ -26,4 +26,9 @@ export const inventoryApi = {
   createSupplier: (payload) => centralApi.post('/v1/suppliers', payload),
   updateSupplier: (supplierId, payload) => centralApi.put(`/v1/suppliers/${encodeURIComponent(String(supplierId))}`, payload),
   deleteSupplier: (supplierId) => centralApi.delete(`/v1/suppliers/${encodeURIComponent(String(supplierId))}`),
+  purchases: ({ branchId = '', supplierId = '', startDate = '', endDate = '', page = 1, limit = 50 } = {}) => centralApi.get('/v1/purchases', {
+    params: { branch_id: branchId || undefined, supplier_id: supplierId || undefined, start_date: startDate || undefined, end_date: endDate || undefined, page, limit },
+  }),
+  purchase: (purchaseId) => centralApi.get(`/v1/purchases/${encodeURIComponent(String(purchaseId))}`),
+  createPurchase: (payload) => centralApi.post('/v1/purchases', payload),
 };
