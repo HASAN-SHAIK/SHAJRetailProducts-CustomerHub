@@ -29,7 +29,7 @@ jobs:
       - name: Install Playwright runtime only
         run: |
           npm install --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
       - name: Start real CustomerHub preview
         run: |
           npm run preview -- --host 127.0.0.1 --port 4175 > /tmp/ch15-preview.log 2>&1 &
@@ -42,32 +42,23 @@ jobs:
           exit 1
       - name: Exercise real Inventory Policies UI and API path
         run: |
-          cat > /tmp/ch15-runtime.mjs <<'EOF'
+          cat > .ch15-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           import assert from 'node:assert/strict';
-
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage();
           const observed = [];
           await page.route('http://localhost:5001/api/**', async (route) => {
-            const req = route.request();
-            const url = new URL(req.url());
+            const req = route.request(); const url = new URL(req.url());
             observed.push({ method: req.method(), path: url.pathname, postData: req.postData() });
             const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
             if (url.pathname === '/api/auth/getLogin') return json({ user: { id: 'admin-1', role: 'admin', name: 'Runtime Admin' } });
-            if (url.pathname === '/api/configuration/catalog') return json({ settings: [
-              { key: 'inventory.allow_negative_stock', group: 'inventory', type: 'boolean', scopes: ['tenant','branch','device'] }
-            ] });
+            if (url.pathname === '/api/configuration/catalog') return json({ settings: [{ key: 'inventory.allow_negative_stock', group: 'inventory', type: 'boolean', scopes: ['tenant','branch','device'] }] });
             if (url.pathname === '/api/branches') return json({ branches: [] });
-            if (url.pathname === '/api/configuration/scopes/tenant/current' && req.method() === 'GET') return json({
-              overrides: {}, effective: { values: { 'inventory.allow_negative_stock': false }, sources: { 'inventory.allow_negative_stock': { scope_type: 'system' } }, etag: 'etag-runtime-1234567890' }
-            });
-            if (url.pathname === '/api/configuration/scopes/tenant/current' && req.method() === 'PUT') return json({
-              overrides: { 'inventory.allow_negative_stock': true }, effective: { values: { 'inventory.allow_negative_stock': true }, sources: { 'inventory.allow_negative_stock': { scope_type: 'tenant' } }, etag: 'etag-runtime-updated' }
-            });
+            if (url.pathname === '/api/configuration/scopes/tenant/current' && req.method() === 'GET') return json({ overrides: {}, effective: { values: { 'inventory.allow_negative_stock': false }, sources: { 'inventory.allow_negative_stock': { scope_type: 'system' } }, etag: 'etag-runtime-1234567890' } });
+            if (url.pathname === '/api/configuration/scopes/tenant/current' && req.method() === 'PUT') return json({ overrides: { 'inventory.allow_negative_stock': true }, effective: { values: { 'inventory.allow_negative_stock': true }, sources: { 'inventory.allow_negative_stock': { scope_type: 'tenant' } }, etag: 'etag-runtime-updated' } });
             return json({ message: `Unhandled ${req.method()} ${url.pathname}` }, 500);
           });
-
           await page.goto('http://127.0.0.1:4175/inventory/policies', { waitUntil: 'networkidle' });
           await page.getByRole('heading', { name: 'Inventory Policies' }).waitFor();
           await page.getByText('Allow Negative Stock', { exact: true }).waitFor();
@@ -77,17 +68,14 @@ jobs:
           await select.selectOption('true');
           await page.getByRole('button', { name: 'Save configuration' }).click();
           await page.getByText('Configuration saved. Effective values were recalculated.').waitFor();
-
           const put = observed.find((x) => x.method === 'PUT' && x.path === '/api/configuration/scopes/tenant/current');
-          assert.ok(put, 'expected real UI to issue tenant configuration PUT');
-          const body = JSON.parse(put.postData || '{}');
-          assert.equal(body.values['inventory.allow_negative_stock'], true);
+          assert.ok(put);
+          assert.equal(JSON.parse(put.postData || '{}').values['inventory.allow_negative_stock'], true);
           console.log('RUNTIME_UI_PASS');
-          console.log(JSON.stringify({ observed, heading: await page.getByRole('heading', { name: 'Inventory Policies' }).textContent() }, null, 2));
+          console.log(JSON.stringify(observed, null, 2));
           await browser.close();
           EOF
-          node /tmp/ch15-runtime.mjs
-          echo '--- preview log ---'
+          node ./.ch15-runtime.mjs
           cat /tmp/ch15-preview.log
       - name: Stop preview
         if: always()
