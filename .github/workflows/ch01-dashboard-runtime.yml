@@ -35,7 +35,7 @@ jobs:
           grep -q '<div id="root"></div>' /tmp/ch01-route.html
       - name: Exercise real Smart Insights UI path
         run: |
-          cat > /tmp/ch01-runtime.mjs <<'EOF'
+          cat > .ch01-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({headless:true});
           const page = await browser.newPage();
@@ -62,7 +62,7 @@ jobs:
           console.log('BODY=' + (await page.locator('body').innerText()).slice(0, 1200));
           await browser.close();
           EOF
-          node /tmp/ch01-runtime.mjs
+          node .ch01-runtime.mjs
       - name: Show runtime logs
         if: always()
         run: |
