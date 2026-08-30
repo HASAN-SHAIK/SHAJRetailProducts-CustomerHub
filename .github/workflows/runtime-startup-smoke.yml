@@ -1,0 +1,59 @@
+name: CustomerHub Runtime Startup Smoke
+
+on:
+  push:
+    branches: [test/customerhub-runtime-startup]
+  pull_request:
+    branches: [main]
+
+jobs:
+  automated-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Focused dashboard acceptance
+        run: npm run test:dashboard
+      - name: Focused customer acceptance
+        run: npm run test:customers
+
+  runtime-startup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Build production bundle
+        run: npm run build
+      - name: Start Vite preview and verify real HTTP path
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/customerhub-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID || true; cat /tmp/customerhub-preview.log' EXIT
+
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ -o /tmp/customerhub-home.html; then
+              break
+            fi
+            sleep 1
+          done
+
+          test -s /tmp/customerhub-home.html
+          grep -q '<div id="root"></div>' /tmp/customerhub-home.html
+
+          ASSET_PATH=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/customerhub-home.html | head -n1)
+          test -n "$ASSET_PATH"
+          curl --fail --silent "http://127.0.0.1:4173${ASSET_PATH}" -o /tmp/customerhub-app.js
+          test -s /tmp/customerhub-app.js
+
+          echo '--- HTTP response head ---'
+          head -n 20 /tmp/customerhub-home.html
+          echo '--- Preview log ---'
+          cat /tmp/customerhub-preview.log
