@@ -70,13 +70,13 @@ jobs:
           await page.goto('http://127.0.0.1:4180/finance/expenses', { waitUntil: 'networkidle' });
           await page.getByText('Central/PostgreSQL is the source of truth.', { exact: false }).waitFor();
           await page.getByText('Electricity', { exact: true }).waitFor();
-          await page.getByRole('button', { name: 'Add Expense', exact: true }).click();
+          await page.locator('.expense-header-actions button.primary-btn').click();
           await page.getByLabel('Category').fill('Marketing');
           await page.getByLabel('Amount').fill('2500');
           await page.getByLabel('Payment method').fill('bank');
           await page.getByLabel('Date').fill('2026-08-30');
           await page.getByLabel('Notes').fill('Runtime campaign');
-          await page.locator('#expense-form').getByRole('button', { name: 'Add expense', exact: true }).click();
+          await page.locator('#expense-form button.primary-btn').click();
 
           await page.getByText('Runtime campaign', { exact: true }).waitFor();
           assert.equal(calls.filter((call) => call === 'POST /api/expenses').length, 1);
