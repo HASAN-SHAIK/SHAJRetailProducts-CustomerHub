@@ -1,0 +1,103 @@
+name: V1 CH-04 Expense Runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v1-ch04-expense-runtime.yml'
+
+jobs:
+  ch04-expense-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused CH-04 acceptance
+        run: npm run test:expenses
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4180 > /tmp/ch04-preview.log 2>&1 &
+          echo $! > /tmp/ch04-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4180/finance/expenses > /tmp/ch04-expenses.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch04-expenses.html
+          grep -q '<div id="root"></div>' /tmp/ch04-expenses.html
+      - name: Exercise real Expense create UI
+        run: |
+          cat > ch04-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          let createPayload = null;
+          let expenses = [{ expenseId: 'EXP-001', type: 'shop', category: 'Utilities', amount: 1500, paymentMethod: 'cash', notes: 'Electricity', date: '2026-08-01', branch_id: 'branch-001', branchName: 'Main Store', status: 'Approved' }];
+
+          await page.route('http://localhost:5001/api/**', async (route) => {
+            const req = route.request();
+            const url = new URL(req.url());
+            const path = url.pathname;
+            calls.push(`${req.method()} ${path}`);
+            const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+            if (path === '/api/auth/getLogin') return json({ user: { id: 'admin-1', name: 'Runtime Admin', role: 'admin' } });
+            if (path === '/api/expenses' && req.method() === 'GET') return json({ expenses });
+            if (path === '/api/expenses' && req.method() === 'POST') {
+              createPayload = JSON.parse(req.postData() || '{}');
+              expenses = [...expenses, { expenseId: 'EXP-002', ...createPayload, status: 'Approved', branchName: 'Main Store' }];
+              return json({ expenseId: 'EXP-002', ...createPayload }, 201);
+            }
+            if (path === '/api/branches') return json([{ id: 'branch-001', store_number: 'STORE-001', name: 'Main Store', location: 'Hyderabad', is_active: true }]);
+            if (path === '/api/v1/staff') return json({ staff: [{ staffId: 'STAFF-001', name: 'Asha Rao', status: 'active', branch_id: 'branch-001' }] });
+            if (path === '/api/settings/application') return json({});
+            return json({});
+          });
+
+          await page.goto('http://127.0.0.1:4180/finance/expenses', { waitUntil: 'networkidle' });
+          await page.getByText('Central/PostgreSQL is the source of truth.', { exact: false }).waitFor();
+          await page.getByText('Electricity', { exact: true }).waitFor();
+          await page.locator('.expense-header-actions button.primary-btn').click();
+          await page.getByLabel('Category').fill('Marketing');
+          await page.getByLabel('Amount').fill('2500');
+          await page.getByLabel('Payment method').fill('bank');
+          await page.getByLabel('Date').fill('2026-08-30');
+          await page.getByLabel('Notes').fill('Runtime campaign');
+          await page.locator('#expense-form button.primary-btn').click();
+
+          await page.getByText('Runtime campaign', { exact: true }).waitFor();
+          assert.equal(calls.filter((call) => call === 'POST /api/expenses').length, 1);
+          assert.ok(calls.filter((call) => call === 'GET /api/expenses').length >= 2, `Expected refresh after create: ${calls.join(', ')}`);
+          assert.deepEqual(createPayload, {
+            type: 'shop',
+            category: 'Marketing',
+            amount: 2500,
+            paymentMethod: 'bank',
+            notes: 'Runtime campaign',
+            date: '2026-08-30',
+          });
+
+          console.log('CH04_RUNTIME_UI_PASS');
+          console.log(`CH04_CREATE_PAYLOAD=${JSON.stringify(createPayload)}`);
+          console.log(`CH04_RUNTIME_CALLS=${calls.join('|')}`);
+          await browser.close();
+          EOF
+          node ch04-runtime.mjs
+      - name: Show runtime logs
+        if: always()
+        run: |
+          cat /tmp/ch04-preview.log || true
+          if test -f /tmp/ch04-preview.pid; then kill $(cat /tmp/ch04-preview.pid) || true; fi
