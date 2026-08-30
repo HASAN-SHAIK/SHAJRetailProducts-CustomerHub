@@ -38,7 +38,7 @@ jobs:
           cat /tmp/ch02-preview.log
       - name: Exercise real Stores UI
         run: |
-          cat > /tmp/ch02-runtime.mjs <<'EOF'
+          cat > ch02-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           import assert from 'node:assert/strict';
 
@@ -97,7 +97,7 @@ jobs:
           console.log(`CH02_RUNTIME_CALLS=${calls.join('|')}`);
           await browser.close();
           EOF
-          node /tmp/ch02-runtime.mjs
+          node ch02-runtime.mjs
       - name: Show runtime logs
         if: always()
         run: |
