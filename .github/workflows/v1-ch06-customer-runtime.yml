@@ -40,7 +40,7 @@ jobs:
         id: runtime
         continue-on-error: true
         run: |
-          cat > /tmp/ch06-runtime.mjs <<'EOF'
+          cat > ./ch06-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage();
@@ -75,7 +75,7 @@ jobs:
           console.log('CH06_RUNTIME_CUSTOMER_API_PASS=' + customerCalls.join(' | '));
           await browser.close();
           EOF
-          node /tmp/ch06-runtime.mjs
+          node ./ch06-runtime.mjs
       - name: Final gate
         if: always()
         run: |
