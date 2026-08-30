@@ -1,0 +1,105 @@
+name: V1 CH-02 Store Runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v1-ch02-store-runtime.yml'
+
+jobs:
+  ch02-store-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused CH-02 acceptance
+        run: npm run test:stores
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4178 > /tmp/ch02-preview.log 2>&1 &
+          echo $! > /tmp/ch02-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4178/stores > /tmp/ch02-stores.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch02-stores.html
+          grep -q '<div id="root"></div>' /tmp/ch02-stores.html
+          cat /tmp/ch02-preview.log
+      - name: Exercise real Stores UI
+        run: |
+          cat > /tmp/ch02-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          let branches = [{ id: 'branch-001', store_number: 'STORE-001', name: 'Main Store', location: 'Hyderabad', is_active: true }];
+          let createPayload = null;
+
+          await page.route('http://localhost:5001/api/**', async (route) => {
+            const req = route.request();
+            const url = new URL(req.url());
+            const path = url.pathname;
+            calls.push(`${req.method()} ${path}`);
+
+            if (path === '/api/auth/getLogin' && req.method() === 'GET') {
+              return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'admin-1', name: 'Runtime Admin', role: 'admin' } }) });
+            }
+            if (path === '/api/branches' && req.method() === 'GET') {
+              return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(branches) });
+            }
+            if (path === '/api/branches' && req.method() === 'POST') {
+              createPayload = JSON.parse(req.postData() || '{}');
+              const created = { id: 'branch-002', ...createPayload, is_active: true };
+              branches = [...branches, created];
+              return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(created) });
+            }
+            if (path === '/api/settings/application') {
+              return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+            }
+            return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+          });
+
+          await page.goto('http://127.0.0.1:4178/stores', { waitUntil: 'networkidle' });
+          await page.getByRole('heading', { name: 'Stores & Branches' }).waitFor();
+          await page.getByText('STORE-001', { exact: true }).waitFor();
+          await page.getByText('Main Store', { exact: true }).waitFor();
+
+          await page.getByRole('button', { name: /Add store/i }).click();
+          await page.getByLabel('Store Number').fill('STORE-002');
+          await page.getByLabel('Store / branch name').fill('Automation Store');
+          await page.getByLabel('Location').fill('Secunderabad');
+          await page.getByRole('button', { name: 'Create', exact: true }).click();
+
+          await page.getByText('STORE-002', { exact: true }).waitFor();
+          await page.getByText('Automation Store', { exact: true }).waitFor();
+          assert.deepEqual(createPayload, { store_number: 'STORE-002', name: 'Automation Store', location: 'Secunderabad' });
+          assert.ok(calls.filter((call) => call === 'GET /api/branches').length >= 2, `Expected reload after create, calls=${calls.join(', ')}`);
+          assert.equal(calls.filter((call) => call === 'POST /api/branches').length, 1);
+
+          const posLink = page.getByRole('link', { name: /Manage POS setup/i }).first();
+          assert.match(await posLink.getAttribute('href'), /^\/stores-pos\/registered-devices\?branch=branch-001$/);
+
+          console.log('CH02_RUNTIME_UI_PASS');
+          console.log(`CH02_CREATE_PAYLOAD=${JSON.stringify(createPayload)}`);
+          console.log(`CH02_RUNTIME_CALLS=${calls.join('|')}`);
+          await browser.close();
+          EOF
+          node /tmp/ch02-runtime.mjs
+      - name: Show runtime logs
+        if: always()
+        run: |
+          cat /tmp/ch02-preview.log || true
+          if test -f /tmp/ch02-preview.pid; then kill $(cat /tmp/ch02-preview.pid) || true; fi
