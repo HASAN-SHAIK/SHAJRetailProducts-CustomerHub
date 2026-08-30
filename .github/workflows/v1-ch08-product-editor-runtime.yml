@@ -1,0 +1,109 @@
+name: V1 CH-08 Product Editor Runtime
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ch08:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Focused CH-08 acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-product-editor.acceptance.mjs
+      - name: Repository CH-08 command
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-editor
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4184 > /tmp/ch08-preview.log 2>&1 &
+          echo $! > /tmp/ch08-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4184/inventory/products/new >/tmp/ch08.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4184/inventory/products/new >/tmp/ch08.html
+          echo "CH08_PREVIEW_HTTP_PASS bytes=$(wc -c </tmp/ch08.html)"
+      - name: Real browser product-create verification
+        id: runtime
+        continue-on-error: true
+        run: |
+          node --input-type=module <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls = [];
+          let post = null;
+          await page.route('**/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            calls.push(`${req.method()} ${url.pathname}${url.search}`);
+            if (req.method() === 'POST') {
+              post = { path: url.pathname, body: req.postDataJSON?.() ?? JSON.parse(req.postData() || '{}') };
+            }
+            if (url.pathname.endsWith('/auth/getLogin')) {
+              return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({user:{id:1,name:'Runtime Admin',role:'admin',email:'runtime@example.test'}})});
+            }
+            if (url.pathname.endsWith('/branches')) {
+              return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify([{id:'branch-001',name:'Main Store'}])});
+            }
+            if (url.pathname.endsWith('/settings/application')) {
+              return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({})});
+            }
+            if (req.method() === 'POST') {
+              return route.fulfill({status:201, contentType:'application/json', body:JSON.stringify({id:'product-runtime-001',ok:true})});
+            }
+            return route.fulfill({status:200, contentType:'application/json', body:'{}'});
+          });
+          await page.goto('http://127.0.0.1:4184/inventory/products/new', {waitUntil:'networkidle'});
+          const body = await page.locator('body').innerText();
+          console.log('CH08_RUNTIME_UI_RENDERED', body.replace(/\s+/g,' ').slice(0,700));
+          const openingStockVisible = await page.getByText('Opening stock', {exact:true}).count() > 0;
+          console.log('CH08_OPENING_STOCK_VISIBLE', openingStockVisible);
+          await page.getByLabel('Name').fill('Runtime Product');
+          await page.getByLabel('Company').fill('SHAJ Runtime');
+          await page.getByLabel('Category').fill('Test');
+          await page.getByLabel('Barcode').fill('8909001999999');
+          if (openingStockVisible) await page.getByLabel('Opening stock').fill('7');
+          await page.getByLabel('Purchase price').fill('100');
+          await page.getByLabel('Selling price').fill('120');
+          await page.getByLabel('GST %').fill('5');
+          await page.getByLabel('Branch').selectOption('branch-001');
+          await page.getByRole('button', {name:'Save product'}).click();
+          await page.waitForTimeout(300);
+          console.log('CH08_RUNTIME_CALLS', calls.join(' | '));
+          console.log('CH08_RUNTIME_POST', JSON.stringify(post));
+          const canonical = post?.path === '/api/v1/products';
+          const directStockMutation = post && Object.prototype.hasOwnProperty.call(post.body || {}, 'stock_quantity');
+          console.log('CH08_CANONICAL_V1_POST', canonical);
+          console.log('CH08_DIRECT_STOCK_MUTATION', directStockMutation);
+          await browser.close();
+          if (!post) process.exit(3);
+          if (!canonical || openingStockVisible || directStockMutation) process.exit(2);
+          console.log('CH08_RUNTIME_PASS');
+          EOF
+      - name: Preview logs
+        if: always()
+        run: cat /tmp/ch08-preview.log || true
+      - name: CH-08 final gate
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }} package_gate=${{ steps.package_gate.outcome }} runtime=${{ steps.runtime.outcome }}"
+          test "${{ steps.focused.outcome }}" = "success"
+          test "${{ steps.package_gate.outcome }}" = "success"
+          test "${{ steps.runtime.outcome }}" = "success"
