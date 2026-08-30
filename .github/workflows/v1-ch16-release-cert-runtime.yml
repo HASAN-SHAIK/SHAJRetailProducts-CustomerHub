@@ -1,0 +1,57 @@
+name: V1 CH-16 release certification runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ch16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused inventory release acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-release-cert.acceptance.mjs
+      - name: Repository inventory release command
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-release
+      - name: Build runnable CustomerHub
+        run: npm run build
+      - name: Runtime smoke real Vite preview
+        run: |
+          set -euxo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4176 > /tmp/ch16-preview.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4176/inventory -o /tmp/inventory.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/inventory.html
+          grep -F '<div id="root"></div>' /tmp/inventory.html
+          bundle=$(grep -oE '/assets/index-[^" ]+\.js' /tmp/inventory.html | head -1)
+          test -n "$bundle"
+          curl -fsS "http://127.0.0.1:4176${bundle}" -o /tmp/app.js
+          test -s /tmp/app.js
+          echo "RUNTIME_ROUTE=/inventory"
+          echo "RUNTIME_HTTP=200"
+          echo "RUNTIME_HTML_BYTES=$(wc -c < /tmp/inventory.html)"
+          echo "RUNTIME_BUNDLE=${bundle}"
+          echo "RUNTIME_BUNDLE_BYTES=$(wc -c < /tmp/app.js)"
+          cat /tmp/ch16-preview.log
+      - name: Enforce automated certification gate
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }}"
+          echo "package_gate=${{ steps.package_gate.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
+          test "${{ steps.package_gate.outcome }}" = success
