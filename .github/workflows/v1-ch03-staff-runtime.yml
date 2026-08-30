@@ -1,0 +1,108 @@
+name: V1 CH-03 Staff Runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v1-ch03-staff-runtime.yml'
+
+jobs:
+  ch03-staff-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused CH-03 acceptance
+        run: npm run test:staff
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4179 > /tmp/ch03-preview.log 2>&1 &
+          echo $! > /tmp/ch03-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4179/staff/new > /tmp/ch03-staff.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch03-staff.html
+          grep -q '<div id="root"></div>' /tmp/ch03-staff.html
+          cat /tmp/ch03-preview.log
+      - name: Exercise real Staff create UI
+        run: |
+          cat > ch03-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          let createPayload = null;
+          let staff = [{ staffId: 'STAFF-001', name: 'Asha Rao', phone: '9000000001', role: 'Cashier', salary: 18000, joinDate: '2026-01-10', status: 'active', branch_id: 'branch-001' }];
+
+          await page.route('http://localhost:5001/api/**', async (route) => {
+            const req = route.request();
+            const url = new URL(req.url());
+            const path = url.pathname;
+            calls.push(`${req.method()} ${path}`);
+            const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+            if (path === '/api/auth/getLogin') return json({ user: { id: 'admin-1', name: 'Runtime Admin', role: 'admin' } });
+            if (path === '/api/v1/staff' && req.method() === 'GET') return json({ staff });
+            if (path === '/api/v1/staff' && req.method() === 'POST') {
+              createPayload = JSON.parse(req.postData() || '{}');
+              staff = [...staff, createPayload];
+              return json(createPayload, 201);
+            }
+            if (path === '/api/branches') return json([{ id: 'branch-001', store_number: 'STORE-001', name: 'Main Store', location: 'Hyderabad', is_active: true }]);
+            if (path === '/api/users') return json({ users: [] });
+            if (path === '/api/v1/staff/salary') return json({ salaries: [] });
+            if (path === '/api/expenses') return json({ expenses: [] });
+            if (path === '/api/v1/staff/performance') return json({ rows: [], summary: {} });
+            if (path === '/api/settings/application') return json({});
+            return json({});
+          });
+
+          await page.goto('http://127.0.0.1:4179/staff/new', { waitUntil: 'networkidle' });
+          await page.getByText('Central/PostgreSQL is authoritative for staff profile data.', { exact: false }).waitFor();
+          await page.getByLabel('Staff ID').fill('STAFF-002');
+          await page.getByLabel('Name').first().fill('Runtime Staff');
+          await page.getByLabel('Phone').fill('9000000002');
+          await page.getByLabel('Salary').fill('20000');
+          await page.getByLabel('Join date').fill('2026-08-30');
+          await page.getByLabel('Branch assignment').selectOption('branch-001');
+          await page.getByRole('button', { name: 'Create staff', exact: true }).click();
+
+          await page.waitForURL('**/staff/edit');
+          assert.equal(calls.filter((call) => call === 'POST /api/v1/staff').length, 1);
+          assert.ok(calls.filter((call) => call === 'GET /api/v1/staff').length >= 2, `Expected refresh after create: ${calls.join(', ')}`);
+          assert.deepEqual(createPayload, {
+            staffId: 'STAFF-002',
+            name: 'Runtime Staff',
+            phone: '9000000002',
+            role: 'Cashier',
+            salary: 20000,
+            joinDate: '2026-08-30',
+            status: 'active',
+            branch_id: 'branch-001',
+          });
+
+          console.log('CH03_RUNTIME_UI_PASS');
+          console.log(`CH03_CREATE_PAYLOAD=${JSON.stringify(createPayload)}`);
+          console.log(`CH03_RUNTIME_CALLS=${calls.join('|')}`);
+          await browser.close();
+          EOF
+          node ch03-runtime.mjs
+      - name: Show runtime logs
+        if: always()
+        run: |
+          cat /tmp/ch03-preview.log || true
+          if test -f /tmp/ch03-preview.pid; then kill $(cat /tmp/ch03-preview.pid) || true; fi
