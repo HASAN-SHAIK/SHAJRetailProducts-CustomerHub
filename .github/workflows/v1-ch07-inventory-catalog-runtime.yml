@@ -1,0 +1,120 @@
+name: V1 CH-07 Inventory Catalog Runtime Verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [test/ch07-inventory-catalog-runtime-cycle17]
+
+jobs:
+  ch07:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused inventory catalog acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-product-catalog.acceptance.mjs
+      - name: Repository inventory catalog command wiring
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-catalog
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4183 > /tmp/ch07-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4183/inventory/catalog >/tmp/ch07.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4183/inventory/catalog >/tmp/ch07.html
+          grep -q '<div id="root"></div>' /tmp/ch07.html
+          cat /tmp/ch07-preview.log
+      - name: Real browser inventory catalog path
+        id: runtime
+        continue-on-error: true
+        run: |
+          cat > ./ch07-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            calls.push(`${req.method()} ${url.pathname}${url.search}`);
+            let body = { data: {} };
+            if (url.pathname === '/api/auth/getLogin') {
+              body = { data: { user: { id: 1, name: 'Runtime Admin', email: 'admin@runtime.test', role: 'admin' } } };
+            } else if (url.pathname === '/api/settings/application') {
+              body = { data: { settings: {} } };
+            } else if (url.pathname === '/api/branches') {
+              body = { data: { branches: [{ id: 'branch-001', branch_id: 'branch-001', name: 'Main Store', branch_name: 'Main Store' }] } };
+            } else if (url.pathname === '/api/v1/categories') {
+              body = { data: { categories: [{ name: 'Dairy', product_count: 1 }], meta: { page: 1, limit: 200, total: 1, total_pages: 1 } } };
+            } else if (url.pathname === '/api/v1/products') {
+              body = { data: { products: [{
+                id: 101,
+                name: 'Runtime Milk 500ml',
+                company: 'Runtime Dairy',
+                barcode: '8901000000101',
+                category: 'Dairy',
+                selling_price: 35,
+                mrp: 38,
+                purchase_price: 30,
+                gst_percentage: 5,
+                hsn_code: '0401',
+                branch_id: 'branch-001',
+                is_batch_enabled: true,
+                is_weight_based: false,
+                updated_at: '2026-08-30T20:00:00.000Z',
+                inventory: {
+                  projected_net_quantity: 18,
+                  sellable_quantity: 17,
+                  physical_quantity: 20,
+                  expired_quantity: 2,
+                  provisional_deficit: 1,
+                  is_low_stock: false,
+                  is_out_of_stock: false
+                }
+              }], meta: { page: 1, limit: 25, total: 1, total_pages: 1 } } };
+            }
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+          });
+          await page.goto('http://127.0.0.1:4183/inventory/catalog', { waitUntil: 'networkidle' });
+          await page.getByRole('heading', { name: 'Product Catalog' }).waitFor();
+          await page.getByText('Runtime Milk 500ml').waitFor();
+          await page.getByText('18 projected').waitFor();
+          await page.getByText(/Sellable 17.*Physical 20/).waitFor();
+          await page.getByText('Expired 2').waitFor();
+          await page.getByText('Offline deficit 1').waitFor();
+          await page.getByText('Batch tracked').waitFor();
+          await page.getByText('Inventory truth boundary').waitFor();
+          const productCalls = calls.filter(x => x.includes('/api/v1/products'));
+          const categoryCalls = calls.filter(x => x.includes('/api/v1/categories'));
+          if (productCalls.length === 0) throw new Error('Canonical /api/v1/products runtime call was not observed');
+          if (categoryCalls.length === 0) throw new Error('Canonical /api/v1/categories runtime call was not observed');
+          if (!productCalls.some(x => x.includes('branch_id=branch-001'))) throw new Error('Branch-scoped product runtime call was not observed');
+          console.log('CH07_RUNTIME_UI_PASS');
+          console.log('CH07_RUNTIME_CALLS=' + calls.join(' | '));
+          console.log('CH07_RUNTIME_PRODUCT_CALLS=' + productCalls.join(' | '));
+          await browser.close();
+          EOF
+          node ./ch07-runtime.mjs
+      - name: Final gate
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }} package_gate=${{ steps.package_gate.outcome }} runtime=${{ steps.runtime.outcome }}"
+          test "${{ steps.focused.outcome }}" = "success"
+          test "${{ steps.package_gate.outcome }}" = "success"
+          test "${{ steps.runtime.outcome }}" = "success"
