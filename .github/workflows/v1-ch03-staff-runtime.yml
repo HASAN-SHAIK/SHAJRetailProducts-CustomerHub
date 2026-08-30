@@ -98,7 +98,7 @@ jobs:
 
           await page.goto('http://127.0.0.1:4179/staff', { waitUntil: 'networkidle' });
           await page.getByText('Asha Rao', { exact: true }).waitFor();
-          await page.getByText('Main Store', { exact: true }).waitFor();
+          await page.getByRole('cell', { name: 'Main Store', exact: true }).waitFor();
           await page.getByText('Central/PostgreSQL is authoritative for staff profile data.', { exact: true }).waitFor();
           await page.getByText('Login roles and permissions remain a separate access-control concern.', { exact: true }).waitFor();
 
