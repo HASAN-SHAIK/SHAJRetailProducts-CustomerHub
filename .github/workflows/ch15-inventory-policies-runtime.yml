@@ -17,6 +17,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Focused inventory policies acceptance
+        id: focused
+        continue-on-error: true
         run: node scripts/inventory-policies.acceptance.mjs
       - name: Check repository CI command wiring
         id: ci_command
@@ -70,7 +72,7 @@ jobs:
           await page.getByRole('heading', { name: 'Inventory Policies' }).waitFor();
           await page.getByText('Allow Negative Stock', { exact: true }).waitFor();
           const select = page.locator('.config-input select').first();
-          await assert.doesNotReject(() => select.waitFor());
+          await select.waitFor();
           assert.equal(await select.inputValue(), 'false');
           await select.selectOption('true');
           await page.getByRole('button', { name: 'Save configuration' }).click();
@@ -91,8 +93,9 @@ jobs:
         if: always()
         run: |
           if [ -f /tmp/ch15-preview.pid ]; then kill $(cat /tmp/ch15-preview.pid) || true; fi
-      - name: Enforce repository CI wiring
-        if: steps.ci_command.outcome != 'success'
+      - name: Enforce scenario gates
+        if: steps.focused.outcome != 'success' || steps.ci_command.outcome != 'success'
         run: |
-          echo 'Repository CI command npm run test:inventory-policies is missing/failing.'
+          echo "Focused acceptance outcome: ${{ steps.focused.outcome }}"
+          echo "Repository CI command outcome: ${{ steps.ci_command.outcome }}"
           exit 1
