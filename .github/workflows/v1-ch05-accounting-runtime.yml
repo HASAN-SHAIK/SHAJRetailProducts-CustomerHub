@@ -1,0 +1,104 @@
+name: V1 CH-05 Accounting Runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v1-ch05-accounting-runtime.yml'
+
+jobs:
+  ch05-accounting-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused CH-05 acceptance
+        id: focused
+        continue-on-error: true
+        run: npm run test:accounts
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4181 > /tmp/ch05-preview.log 2>&1 &
+          echo $! > /tmp/ch05-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4181/finance/accounts > /tmp/ch05-accounts.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch05-accounts.html
+          grep -q '<div id="root"></div>' /tmp/ch05-accounts.html
+      - name: Exercise real Accounting receipt UI
+        run: |
+          cat > ch05-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          let receiptPayload = null;
+          let receipts = [];
+
+          await page.route('http://localhost:5001/api/**', async (route) => {
+            const req = route.request();
+            const url = new URL(req.url());
+            const path = url.pathname;
+            calls.push(`${req.method()} ${path}`);
+            const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+            if (path === '/api/auth/getLogin') return json({ user: { id: 'admin-1', name: 'Runtime Admin', role: 'admin' } });
+            if (path === '/api/settings/application') return json({});
+            if (path === '/api/accounts/cashbook' && req.method() === 'GET') return json({ entries: [{ id: 'cash-1', amount: 1250, type: 'receipt', note: 'Seed cash' }] });
+            if (path === '/api/accounts/receipt' && req.method() === 'GET') return json({ receipts });
+            if (path === '/api/accounts/receipt' && req.method() === 'POST') {
+              receiptPayload = JSON.parse(req.postData() || '{}');
+              receipts = [...receipts, { id: 'receipt-2', ...receiptPayload }];
+              return json({ id: 'receipt-2', ...receiptPayload }, 201);
+            }
+            return json({});
+          });
+
+          await page.goto('http://127.0.0.1:4181/finance/accounts', { waitUntil: 'networkidle' });
+          await page.getByRole('heading', { name: 'Financial Overview' }).waitFor();
+          await page.getByText('Seed cash', { exact: true }).waitFor();
+          await page.getByLabel('Customer ID').fill('101');
+          await page.getByLabel('Amount').first().fill('750');
+          await page.getByLabel('Notes').first().fill('Runtime receipt');
+          await page.getByRole('button', { name: 'Create receipt', exact: true }).click();
+          await page.getByText('Runtime receipt', { exact: true }).waitFor();
+
+          assert.equal(calls.filter((call) => call === 'POST /api/accounts/receipt').length, 1);
+          assert.ok(calls.filter((call) => call === 'GET /api/accounts/receipt').length >= 1, `Expected receipts refresh: ${calls.join(', ')}`);
+          assert.equal(receiptPayload.customer_id, 101);
+          assert.equal(receiptPayload.amount, 750);
+          assert.equal(receiptPayload.payment_mode, 'cash');
+          assert.equal(receiptPayload.notes, 'Runtime receipt');
+          assert.equal(typeof receiptPayload.client_txn_id, 'string');
+          assert.ok(receiptPayload.client_txn_id.length > 8);
+
+          console.log('CH05_RUNTIME_UI_PASS');
+          console.log(`CH05_RECEIPT_PAYLOAD=${JSON.stringify(receiptPayload)}`);
+          console.log(`CH05_RUNTIME_CALLS=${calls.join('|')}`);
+          await browser.close();
+          EOF
+          node ch05-runtime.mjs
+      - name: Show runtime logs
+        if: always()
+        run: |
+          cat /tmp/ch05-preview.log || true
+          if test -f /tmp/ch05-preview.pid; then kill $(cat /tmp/ch05-preview.pid) || true; fi
+      - name: Enforce focused automated gate
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
