@@ -1,0 +1,70 @@
+name: CH-01 Dashboard Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install app dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused CH-01 acceptance
+        run: npm run test:dashboard
+      - name: Build production bundle
+        run: npm run build
+      - name: Install browser runtime dependency
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start real Vite preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4177 > /tmp/ch01-preview.log 2>&1 &
+          echo $! > /tmp/ch01-preview.pid
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4177/ >/tmp/ch01-root.html && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4177/analytics/smart-insights >/tmp/ch01-route.html
+          grep -q '<div id="root"></div>' /tmp/ch01-route.html
+      - name: Exercise real Smart Insights UI path
+        run: |
+          cat > /tmp/ch01-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const seen = [];
+          await page.route('http://localhost:5001/api/**', async route => {
+            const url = new URL(route.request().url());
+            seen.push(url.pathname + url.search);
+            let body = { data: {} };
+            if (url.pathname.endsWith('/auth/getLogin')) body = { user: { id: 'runtime-admin', role: 'admin', name: 'Runtime Admin' } };
+            else if (url.pathname.endsWith('/branches')) body = { branches: [{ id: 'b1', name: 'Main Branch' }] };
+            else if (url.pathname.endsWith('/dashboard/location-performance')) body = { locations: [{ name: 'Hyderabad' }] };
+            else if (url.pathname.endsWith('/dashboard/smart-insights')) body = { insights: [{ type: 'growth', severity: 'info', message: 'Runtime insight verified' }] };
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+          });
+          await page.goto('http://127.0.0.1:4177/analytics/smart-insights', { waitUntil: 'networkidle' });
+          await page.getByRole('heading', { name: 'Smart Insights' }).waitFor();
+          await page.getByText('Authority: Central Smart Insights').waitFor();
+          await page.getByText('Runtime insight verified').waitFor();
+          if (!seen.some(x => x.startsWith('/api/dashboard/smart-insights'))) {
+            throw new Error('Smart Insights Central endpoint was not called at runtime');
+          }
+          console.log('CH01_RUNTIME_UI_PASS');
+          console.log('CENTRAL_CALLS=' + JSON.stringify(seen));
+          console.log('BODY=' + (await page.locator('body').innerText()).slice(0, 1200));
+          await browser.close();
+          EOF
+          node /tmp/ch01-runtime.mjs
+      - name: Show runtime logs
+        if: always()
+        run: |
+          cat /tmp/ch01-preview.log || true
+          if [ -f /tmp/ch01-preview.pid ]; then kill $(cat /tmp/ch01-preview.pid) || true; fi
