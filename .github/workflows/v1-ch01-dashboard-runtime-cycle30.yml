@@ -1,0 +1,83 @@
+name: V1 CH-01 dashboard runtime cycle30
+
+on:
+  push:
+    branches:
+      - test/ch01-dashboard-runtime-cycle30
+  workflow_dispatch:
+
+jobs:
+  ch01-dashboard-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused dashboard acceptance
+        run: |
+          node scripts/dashboard-migration.acceptance.mjs
+          npm run test:dashboard
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4193 > /tmp/ch01-preview.log 2>&1 &
+          echo $! > /tmp/ch01-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4193/analytics/smart-insights >/tmp/ch01.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch01.html
+          echo "CH01_PREVIEW_BYTES=$(wc -c </tmp/ch01.html)"
+      - name: Real Chromium Smart Insights runtime verification
+        run: |
+          cat > ./ch01-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls=[];
+          page.on('request', req => { if (req.url().includes('/api/')) calls.push(`${req.method()} ${new URL(req.url()).pathname}${new URL(req.url()).search}`); });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const u=new URL(route.request().url());
+            const p=u.pathname;
+            let body={data:{}};
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/branches')) body={data:[{id:'branch-001',branch_id:'branch-001',name:'Runtime Branch',branch_name:'Runtime Branch'}]};
+            else if (p.endsWith('/dashboard/locations-list')) body={data:{locations:['Hyderabad']}};
+            else if (p.endsWith('/dashboard/smart-insights')) body={data:{insights:[{type:'growth_opportunity',severity:'warning',message:'Runtime Central insight: milk category growth opportunity.'}]}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:4193/analytics/smart-insights',{waitUntil:'networkidle'});
+          const text=await page.locator('body').innerText();
+          const routeRendered=page.url().endsWith('/analytics/smart-insights');
+          const title=text.includes('Smart Insights');
+          const authority=text.includes('Authority: Central Smart Insights');
+          const insight=text.includes('Runtime Central insight: milk category growth opportunity.');
+          const centralCall=calls.some(x=>x.includes('/api/dashboard/smart-insights'));
+          const posCall=calls.some(x=>x.includes('127.0.0.1:4782') || x.includes('/api/v1/diagnostics') || x.includes('/api/v1/status'));
+          console.log(`CH01_ROUTE_RENDERED=${routeRendered}`);
+          console.log(`CH01_TITLE_RENDERED=${title}`);
+          console.log(`CH01_AUTHORITY_RENDERED=${authority}`);
+          console.log(`CH01_INSIGHT_RENDERED=${insight}`);
+          console.log(`CH01_CENTRAL_INSIGHTS_GET=${centralCall}`);
+          console.log(`CH01_POS_ANALYTICS_CALL=${posCall}`);
+          console.log(`CH01_CALLS=${calls.join(' | ')}`);
+          if (!(routeRendered && title && authority && insight && centralCall && !posCall)) {
+            console.error('CH01_RUNTIME_FAIL'); process.exitCode=1;
+          } else console.log('CH01_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ./ch01-runtime.mjs
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch01-preview.log || true
