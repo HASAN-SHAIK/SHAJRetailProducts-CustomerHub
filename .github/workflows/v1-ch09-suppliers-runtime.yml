@@ -64,10 +64,10 @@ jobs:
           echo "CH09_PREVIEW_BYTES=$(wc -c < /tmp/ch09.html)"
           cat /tmp/ch09-preview.log
 
-      - name: Real browser supplier flow
+      - name: Real browser supplier create and edit flow
         shell: bash
         run: |
-          cat > /tmp/ch09-runtime.mjs <<'EOF'
+          cat > .ch09-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
 
           const browser = await chromium.launch({ headless: true });
@@ -127,28 +127,42 @@ jobs:
           await form.getByRole('button', { name: /Create supplier/i }).click();
           await page.getByText('Runtime Supplier').waitFor();
 
+          const existingRow = page.getByRole('row').filter({ hasText: 'Existing Supplier' });
+          await existingRow.getByRole('button', { name: /Edit/i }).click();
+          await form.getByLabel('Credit limit').fill('12000');
+          const updateRequest = page.waitForRequest(req => req.method() === 'PUT' && req.url().endsWith('/api/v1/suppliers/101'));
+          await form.getByRole('button', { name: /Save supplier/i }).click();
+          await updateRequest;
+
           const canonicalGets = calls.filter(c => c.startsWith('GET /api/v1/suppliers'));
           const canonicalPosts = calls.filter(c => c === 'POST /api/v1/suppliers');
+          const canonicalPuts = calls.filter(c => c === 'PUT /api/v1/suppliers/101');
           const legacySupplierCalls = calls.filter(c => /\/api\/suppliers(?:\?|$|\/)/.test(c) && !c.includes('/api/v1/suppliers'));
-          const hasCurrentBalanceMutation = createdPayload && Object.prototype.hasOwnProperty.call(createdPayload, 'current_balance');
+          const createBalanceMutation = createdPayload && Object.prototype.hasOwnProperty.call(createdPayload, 'current_balance');
+          const updateBalanceMutation = updatedPayload && Object.prototype.hasOwnProperty.call(updatedPayload, 'current_balance');
 
           console.log('CH09_RUNTIME_UI_PASS');
           console.log('CH09_CALLS=' + calls.join(' | '));
           console.log('CH09_CREATE_PAYLOAD=' + JSON.stringify(createdPayload));
+          console.log('CH09_UPDATE_PAYLOAD=' + JSON.stringify(updatedPayload));
           console.log('CH09_CANONICAL_GETS=' + canonicalGets.length);
           console.log('CH09_CANONICAL_POSTS=' + canonicalPosts.length);
+          console.log('CH09_CANONICAL_PUTS=' + canonicalPuts.length);
           console.log('CH09_LEGACY_SUPPLIER_CALLS=' + legacySupplierCalls.length);
-          console.log('CH09_CURRENT_BALANCE_MUTATION=' + Boolean(hasCurrentBalanceMutation));
+          console.log('CH09_CURRENT_BALANCE_MUTATION=' + Boolean(createBalanceMutation || updateBalanceMutation));
 
-          if (canonicalGets.length < 2) throw new Error('Expected canonical supplier list load before and after create.');
+          if (canonicalGets.length < 2) throw new Error('Expected canonical supplier list load before and after mutations.');
           if (canonicalPosts.length !== 1) throw new Error('Expected exactly one canonical supplier create request.');
+          if (canonicalPuts.length !== 1) throw new Error('Expected exactly one canonical supplier update request.');
           if (legacySupplierCalls.length !== 0) throw new Error('Legacy supplier API path was used.');
           if (!createdPayload || createdPayload.name !== 'Runtime Supplier' || createdPayload.credit_limit !== 15000 || createdPayload.branch_id !== 'branch-001') throw new Error('Supplier create payload did not preserve required master data.');
-          if (hasCurrentBalanceMutation) throw new Error('Supplier UI attempted to mutate current_balance.');
+          if (!updatedPayload || updatedPayload.credit_limit !== 12000 || updatedPayload.branch_id !== 'branch-001') throw new Error('Supplier update payload did not preserve required master data.');
+          if (createBalanceMutation || updateBalanceMutation) throw new Error('Supplier UI attempted to mutate current_balance.');
 
           await browser.close();
           EOF
-          node /tmp/ch09-runtime.mjs
+          node .ch09-runtime.mjs
+          rm -f .ch09-runtime.mjs
 
       - name: Record package gate result
         if: always()
