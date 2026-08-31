@@ -1,0 +1,90 @@
+name: V1 CH03 Customer Runtime Cycle32
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/v1-ch03-customer-runtime-cycle32.yml'
+
+jobs:
+  ch03-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused customer acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/customer-migration.acceptance.mjs
+      - name: Repository customer gate
+        id: packagegate
+        continue-on-error: true
+        run: npm run test:customers
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4195 > /tmp/ch03-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4195/customers >/tmp/ch03-shell.html; then break; fi
+            sleep 1
+          done
+          cat /tmp/ch03-preview.log
+          test -s /tmp/ch03-shell.html
+      - name: Real Chromium customer verification
+        run: |
+          cat > ch03-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls = [];
+          await page.route('**/api/**', async route => {
+            const u = new URL(route.request().url());
+            const method = route.request().method();
+            calls.push(`${method} ${u.pathname}${u.search}`);
+            const path = u.pathname;
+            if (path.endsWith('/auth/getLogin')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({user:{id:'runtime-user',name:'Runtime User'},business:{id:'business-1',name:'Runtime Business'}})});
+            if (path.endsWith('/branches')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:'branch-1',store_number:'STORE-001',name:'Main Store'}])});
+            if (path.endsWith('/settings/application')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({})});
+            if (path.endsWith('/v1/customers')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:[{id:'cust-runtime',customer_code:'CUST-RUNTIME',name:'Runtime Customer',phone:'9999999999',credit_limit:10000,outstanding_balance:2500}],total:1})});
+            return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({})});
+          });
+          await page.goto('http://127.0.0.1:4195/customers', {waitUntil:'networkidle'});
+          const body = await page.locator('body').innerText();
+          const finalUrl = page.url();
+          const markers = {
+            route: finalUrl.includes('/customers'),
+            staticProfile: body.includes('Ananya Sharma') && body.includes('CUST-8421'),
+            runtimeCustomer: body.includes('Runtime Customer') || body.includes('CUST-RUNTIME'),
+            authority: body.includes('Central/PostgreSQL is the authority'),
+            loadingState: body.includes('Loading customers'),
+            editAction: body.includes('Edit master profile'),
+            creditLimit: body.includes('Credit limit'),
+            canonicalGet: calls.some(c => c.startsWith('GET /api/v1/customers')),
+          };
+          for (const [k,v] of Object.entries(markers)) console.log(`CH03_${k.toUpperCase()}=${v}`);
+          console.log('CH03_CALLS=' + calls.join(' | '));
+          await browser.close();
+          if (!markers.route || !markers.runtimeCustomer || !markers.authority || !markers.editAction || !markers.creditLimit || !markers.canonicalGet || markers.staticProfile) {
+            console.error('CH03_RUNTIME_CUSTOMER_MIGRATION_MISSING');
+            process.exit(1);
+          }
+          console.log('CH03_RUNTIME_UI_PASS');
+          EOF
+          node ch03-runtime.mjs
+      - name: Record focused gate results
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }}"
+          echo "packagegate=${{ steps.packagegate.outcome }}"
+          test "${{ steps.focused.outcome }}" = "success"
+          test "${{ steps.packagegate.outcome }}" = "success"
