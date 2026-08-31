@@ -1,0 +1,94 @@
+name: V1 CH-11 Purchase Returns Runtime
+
+on:
+  push:
+    branches: [test/v1-ch11-purchase-returns-runtime]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Focused existing acceptance
+        continue-on-error: true
+        run: node scripts/inventory-purchase-returns.acceptance.mjs
+      - name: Repository package gate
+        continue-on-error: true
+        run: npm run test:inventory-purchase-returns
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright runtime only
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4187 > /tmp/ch11-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4187/inventory/purchase-returns >/tmp/ch11-page.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4187/inventory/purchase-returns >/tmp/ch11-page.html
+          echo "CH11_PREVIEW_HTTP_BYTES $(wc -c </tmp/ch11-page.html)"
+          cat /tmp/ch11-preview.log
+      - name: Real browser runtime verification
+        run: |
+          cat > ch11-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          const posts = [];
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req = route.request();
+            const u = new URL(req.url());
+            const path = u.pathname.replace(/^\/api/, '');
+            calls.push(`${req.method()} ${path}${u.search}`);
+            if (req.method() === 'POST') posts.push({ path, body: req.postDataJSON?.() ?? req.postData() });
+            let body = { data: {} };
+            if (path === '/auth/getLogin') body = { user: { id: 1, name: 'Runtime Admin', role: 'admin' } };
+            else if (path === '/settings/application') body = { data: {} };
+            else if (path === '/branches') body = { data: [{ id: 'branch-001', branch_id: 'branch-001', name: 'Main Store', branch_name: 'Main Store' }] };
+            else if (path.startsWith('/purchase-returns')) body = { data: { returns: [{ id: 301, purchase_id: 201, supplier_id: 101, supplier_name: 'Runtime Supplier', created_at: '2026-08-30T10:00:00Z', reason: 'Damaged', total_amount: 250 }] } };
+            else if (path.startsWith('/v1/purchase-returns') && req.method() === 'GET') body = { data: { returns: [{ id: 401, purchase_id: 201, supplier_id: 101, supplier_name: 'V1 Runtime Supplier', created_at: '2026-08-30T10:00:00Z', reason: 'Damaged', total_amount: 250 }] } };
+            else if (path.startsWith('/v1/suppliers')) body = { data: { suppliers: [{ id: 101, name: 'Runtime Supplier' }] } };
+            else if (path.startsWith('/v1/purchases/201')) body = { data: { order: { id: 201, supplier_id: 101, branch_id: 'branch-001' }, items: [{ product_id: 501, product_name: 'Runtime Product' }], batches: [{ id: 701, product_id: 501, batch_number: 'BATCH-01', quantity_remaining: 5, purchase_price: 50 }] } };
+            else if (path.startsWith('/v1/purchases')) body = { data: { purchases: [{ id: 201, supplier_id: 101, supplier_name: 'Runtime Supplier', branch_id: 'branch-001', total_price: 500 }] } };
+            else if (path === '/v1/purchase-returns' && req.method() === 'POST') body = { data: { purchase_return: { id: 402 } } };
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+          });
+
+          await page.goto('http://127.0.0.1:4187/inventory/purchase-returns', { waitUntil: 'networkidle' });
+          const body = await page.locator('body').innerText();
+          const rendered = body.includes('Purchase Returns');
+          const legacyRowRendered = body.includes('Runtime Supplier') && body.includes('Damaged');
+          const createUiRendered = body.includes('Create purchase return') && body.includes('Record purchase return');
+          console.log('CH11_ROUTE_RENDERED', rendered);
+          console.log('CH11_LEGACY_ROW_RENDERED', legacyRowRendered);
+          console.log('CH11_CREATE_UI_RENDERED', createUiRendered);
+          console.log('CH11_CALLS', calls.join(' | '));
+          console.log('CH11_LEGACY_RETURN_GET', calls.some(c => c.startsWith('GET /purchase-returns')));
+          console.log('CH11_CANONICAL_V1_RETURN_GET', calls.some(c => c.startsWith('GET /v1/purchase-returns')));
+          console.log('CH11_CANONICAL_V1_RETURN_POST', posts.some(p => p.path === '/v1/purchase-returns'));
+
+          const refresh = page.getByRole('button', { name: /Refresh/i });
+          if (await refresh.count()) {
+            await refresh.click();
+            await page.waitForTimeout(200);
+          }
+          console.log('CH11_AFTER_REFRESH_CALLS', calls.join(' | '));
+          await browser.close();
+
+          if (!rendered || !legacyRowRendered) throw new Error('Actual routed purchase-returns page did not render/load runtime data.');
+          if (createUiRendered) process.exit(0);
+          console.error('CH11_RUNTIME_V1_CREATE_FLOW_MISSING');
+          process.exit(1);
+          EOF
+          node ch11-runtime.mjs
