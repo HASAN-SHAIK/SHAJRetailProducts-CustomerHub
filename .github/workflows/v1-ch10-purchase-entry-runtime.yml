@@ -41,7 +41,7 @@ jobs:
           cat /tmp/ch10-preview.log
       - name: Real browser runtime verification
         run: |
-          cat > /tmp/ch10-runtime.mjs <<'EOF'
+          cat > ch10-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage();
@@ -85,4 +85,4 @@ jobs:
           if (requiredRendered) process.exit(0);
           process.exit(1);
           EOF
-          node /tmp/ch10-runtime.mjs
+          node ch10-runtime.mjs
