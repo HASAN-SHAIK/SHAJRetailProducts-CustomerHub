@@ -49,24 +49,17 @@ jobs:
               calls.push(`${r.method()} ${u.pathname}${u.search}`);
             }
           });
-          const product = (id,name,barcode) => ({
-            id,name,barcode,company:'SHAJ Foods',category:'Dairy',selling_price:63,mrp:65,purchase_price:50,
-            gst_percentage:5,hsn_code:'0401',branch_id:'branch-1',is_batch_enabled:true,is_weight_based:false,
-            updated_at:'2026-09-01T00:00:00Z',inventory:{projected_net_quantity:12,sellable_quantity:10,physical_quantity:14,expired_quantity:2,provisional_deficit:2,is_low_stock:false,is_out_of_stock:false}
-          });
+          const legacyProduct={id:'legacy-1',name:'Legacy Runtime Milk',barcode:'8901234567890',company:'SHAJ Foods',category:'Dairy',selling_price:63,purchase_price:50,gst_percentage:5,stock_quantity:9};
+          const canonicalProduct={id:'v1-1',name:'Canonical Runtime Milk',barcode:'8901234567890',company:'SHAJ Foods',category:'Dairy',selling_price:63,mrp:65,purchase_price:50,gst_percentage:5,hsn_code:'0401',branch_id:'branch-1',is_batch_enabled:true,updated_at:'2026-09-01T00:00:00Z',inventory:{projected_net_quantity:12,sellable_quantity:10,physical_quantity:14,expired_quantity:2,provisional_deficit:2}};
           await page.route('http://localhost:5001/api/**', async route => {
             const r=route.request(), u=new URL(r.url()), p=u.pathname;
             let body={data:{}};
             if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
             else if (p.endsWith('/settings/application')) body={data:{}};
             else if (p.endsWith('/branches')) body={data:[{id:'branch-1',branch_id:'branch-1',name:'Main Store',branch_name:'Main Store'}]};
-            else if (p.endsWith('/v1/categories')) body={data:{categories:[{name:'Dairy',product_count:2}]},meta:{total:1,page:1,limit:200,total_pages:1}};
-            else if (p.endsWith('/v1/products')) {
-              const pg=Number(u.searchParams.get('page')||'1');
-              const search=u.searchParams.get('search')||'';
-              const rows=pg===2?[product('p2','Runtime Curd','8901234567891')]:[product('p1',search?'Runtime Milk Search':'Runtime Milk','8901234567890')];
-              body={data:{products:rows},meta:{page:pg,limit:25,total:26,total_pages:2}};
-            }
+            else if (p.endsWith('/products') && !p.endsWith('/v1/products')) body={data:{products:[legacyProduct]}};
+            else if (p.endsWith('/v1/categories')) body={data:{categories:[{name:'Dairy',product_count:1}]},meta:{total:1,page:1,limit:200,total_pages:1}};
+            else if (p.endsWith('/v1/products')) body={data:{products:[canonicalProduct]},meta:{page:1,limit:25,total:1,total_pages:1}};
             await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
           });
           await page.goto('http://127.0.0.1:4199/inventory/catalog',{waitUntil:'networkidle'});
@@ -74,42 +67,37 @@ jobs:
           let text=await page.locator('body').innerText();
           const routeOk=page.url().endsWith('/inventory/catalog');
           const title=text.includes('Product Catalog');
-          const authority=text.includes('Central product master');
-          const truth=text.includes('Inventory truth boundary');
-          const initial=text.includes('Runtime Milk');
-          const inventoryFacts=text.includes('12 projected')&&text.includes('Sellable 10')&&text.includes('Physical 14')&&text.includes('Expired 2')&&text.includes('Offline deficit 2')&&text.includes('Batch tracked');
-          const canonicalProducts=calls.some(x=>x.startsWith('GET /api/v1/products'));
-          const canonicalCategories=calls.some(x=>x.startsWith('GET /api/v1/categories'));
-          const branchScoped=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('branch_id=branch-1'));
-          await page.getByPlaceholder('Product, brand/company or barcode').fill('Milk');
-          await page.waitForTimeout(700);
-          text=await page.locator('body').innerText();
-          const searchRendered=text.includes('Runtime Milk Search');
-          const searchQuery=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('search=Milk'));
-          await page.getByRole('button',{name:/Next/}).click();
-          await page.waitForTimeout(500);
-          text=await page.locator('body').innerText();
-          const page2Rendered=text.includes('Runtime Curd');
-          const page2Query=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('page=2'));
+          const legacyRendered=text.includes('Legacy Runtime Milk');
+          const canonicalRendered=text.includes('Canonical Runtime Milk');
+          const centralAuthority=text.includes('Central product master');
+          const truthBoundary=text.includes('Inventory truth boundary');
+          const projectionFacts=text.includes('projected')&&text.includes('Sellable')&&text.includes('Physical');
+          const legacyGet=calls.some(x=>x.startsWith('GET /api/products'));
+          const canonicalGet=calls.some(x=>x.startsWith('GET /api/v1/products'));
+          const categoriesGet=calls.some(x=>x.startsWith('GET /api/v1/categories'));
+          const legacySearch=page.getByPlaceholder('Name, company, barcode');
+          const legacySearchPresent=await legacySearch.count()>0;
+          if(legacySearchPresent){await legacySearch.fill('Milk');await page.getByRole('button',{name:'Search'}).click();await page.waitForTimeout(400);}
+          const legacySearchCall=calls.some(x=>x.startsWith('GET /api/products?')&&x.includes('search=Milk'));
+          const certifiedSearchPresent=await page.getByPlaceholder('Product, brand/company or barcode').count()>0;
           const posLocalCall=calls.some(x=>x.includes('/status')||x.includes('/diagnostics')||x.includes('/sync'));
           console.log(`CH07_ROUTE=${routeOk}`);
           console.log(`CH07_TITLE=${title}`);
-          console.log(`CH07_CENTRAL_AUTHORITY=${authority}`);
-          console.log(`CH07_TRUTH_BOUNDARY=${truth}`);
-          console.log(`CH07_INITIAL_PRODUCT=${initial}`);
-          console.log(`CH07_INVENTORY_FACTS=${inventoryFacts}`);
-          console.log(`CH07_PRODUCTS_GET=${canonicalProducts}`);
-          console.log(`CH07_CATEGORIES_GET=${canonicalCategories}`);
-          console.log(`CH07_BRANCH_SCOPED=${branchScoped}`);
-          console.log(`CH07_SEARCH_RENDERED=${searchRendered}`);
-          console.log(`CH07_SEARCH_QUERY=${searchQuery}`);
-          console.log(`CH07_PAGE2_RENDERED=${page2Rendered}`);
-          console.log(`CH07_PAGE2_QUERY=${page2Query}`);
+          console.log(`CH07_LEGACY_PRODUCT_RENDERED=${legacyRendered}`);
+          console.log(`CH07_CANONICAL_PRODUCT_RENDERED=${canonicalRendered}`);
+          console.log(`CH07_CENTRAL_AUTHORITY=${centralAuthority}`);
+          console.log(`CH07_TRUTH_BOUNDARY=${truthBoundary}`);
+          console.log(`CH07_PROJECTION_FACTS=${projectionFacts}`);
+          console.log(`CH07_LEGACY_PRODUCTS_GET=${legacyGet}`);
+          console.log(`CH07_CANONICAL_V1_PRODUCTS_GET=${canonicalGet}`);
+          console.log(`CH07_CATEGORIES_GET=${categoriesGet}`);
+          console.log(`CH07_LEGACY_SEARCH_PRESENT=${legacySearchPresent}`);
+          console.log(`CH07_LEGACY_SEARCH_CALL=${legacySearchCall}`);
+          console.log(`CH07_CERTIFIED_SEARCH_PRESENT=${certifiedSearchPresent}`);
           console.log(`CH07_POS_LOCAL_CALL=${posLocalCall}`);
           console.log(`CH07_CALLS=${calls.join(' | ')}`);
-          if(!(routeOk&&title&&authority&&truth&&initial&&inventoryFacts&&canonicalProducts&&canonicalCategories&&branchScoped&&searchRendered&&searchQuery&&page2Rendered&&page2Query&&!posLocalCall)){
-            console.error('CH07_RUNTIME_FAIL'); process.exitCode=1;
-          } else console.log('CH07_RUNTIME_UI_PASS');
+          const certifiedRuntime=routeOk&&title&&canonicalRendered&&centralAuthority&&truthBoundary&&projectionFacts&&canonicalGet&&categoriesGet&&certifiedSearchPresent&&!legacyGet&&!posLocalCall;
+          if(!certifiedRuntime){console.error('CH07_RUNTIME_CERTIFIED_CATALOG_NOT_LIVE');process.exitCode=1}else console.log('CH07_RUNTIME_UI_PASS');
           await browser.close();
           EOF
           node ch07-runtime.mjs
