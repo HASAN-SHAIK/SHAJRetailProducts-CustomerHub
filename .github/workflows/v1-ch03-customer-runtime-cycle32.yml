@@ -52,7 +52,7 @@ jobs:
             const method = route.request().method();
             calls.push(`${method} ${u.pathname}${u.search}`);
             const path = u.pathname;
-            if (path.endsWith('/auth/getLogin')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({user:{id:'runtime-user',name:'Runtime User'},business:{id:'business-1',name:'Runtime Business'}})});
+            if (path.endsWith('/auth/getLogin')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({user:{id:'runtime-user',name:'Runtime User',role:'admin'},business:{id:'business-1',name:'Runtime Business'}})});
             if (path.endsWith('/branches')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:'branch-1',store_number:'STORE-001',name:'Main Store'}])});
             if (path.endsWith('/settings/application')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({})});
             if (path.endsWith('/v1/customers')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:[{id:'cust-runtime',customer_code:'CUST-RUNTIME',name:'Runtime Customer',phone:'9999999999',credit_limit:10000,outstanding_balance:2500}],total:1})});
