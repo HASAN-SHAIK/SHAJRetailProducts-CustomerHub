@@ -1,0 +1,162 @@
+name: V1 CH-09 Supplier Runtime
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/v1-ch09-suppliers-runtime.yml'
+  push:
+    branches:
+      - 'test/ch09-suppliers-runtime-cycle10'
+
+jobs:
+  ch09-suppliers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused supplier acceptance
+        run: node scripts/inventory-suppliers.acceptance.mjs
+
+      - name: Check repository supplier script wiring
+        id: package_gate
+        shell: bash
+        run: |
+          set +e
+          npm run test:inventory-suppliers
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            echo "CH09_PACKAGE_GATE_MISSING_OR_FAILING=true"
+          fi
+          exit 0
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4185 > /tmp/ch09-preview.log 2>&1 &
+          echo $! > /tmp/ch09-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4185/inventory/suppliers >/tmp/ch09.html; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS -D /tmp/ch09.headers http://127.0.0.1:4185/inventory/suppliers -o /tmp/ch09.html
+          echo "CH09_PREVIEW_HTTP=$(head -n 1 /tmp/ch09.headers | tr -d '\r')"
+          echo "CH09_PREVIEW_BYTES=$(wc -c < /tmp/ch09.html)"
+          cat /tmp/ch09-preview.log
+
+      - name: Real browser supplier flow
+        shell: bash
+        run: |
+          cat > /tmp/ch09-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          let createdPayload = null;
+          let updatedPayload = null;
+          let supplierListCount = 0;
+
+          await page.route('**/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            const path = url.pathname + url.search;
+            calls.push(`${req.method()} ${path}`);
+
+            const json = (body, status = 200) => route.fulfill({
+              status,
+              contentType: 'application/json',
+              body: JSON.stringify(body),
+            });
+
+            if (url.pathname.endsWith('/api/auth/getLogin')) return json({ id: 1, name: 'Runtime Admin' });
+            if (url.pathname.endsWith('/api/settings/application')) return json({});
+            if (url.pathname.endsWith('/api/branches')) return json([{ id: 'branch-001', branch_id: 'branch-001', name: 'Main Store', branch_name: 'Main Store' }]);
+
+            if (url.pathname.endsWith('/api/v1/suppliers') && req.method() === 'GET') {
+              supplierListCount += 1;
+              const suppliers = supplierListCount === 1
+                ? [{ id: 101, name: 'Existing Supplier', mobile: '9000000001', email: 'existing@example.com', gst_number: '36ABCDE1234F1Z5', credit_limit: 10000, current_balance: 2500, branch_id: 'branch-001', is_active: true }]
+                : [{ id: 101, name: 'Existing Supplier', mobile: '9000000001', email: 'existing@example.com', gst_number: '36ABCDE1234F1Z5', credit_limit: 10000, current_balance: 2500, branch_id: 'branch-001', is_active: true }, { id: 202, name: 'Runtime Supplier', mobile: '9000000002', email: 'runtime@example.com', gst_number: '36ABCDE9999F1Z5', credit_limit: 15000, current_balance: 0, branch_id: 'branch-001', is_active: true }];
+              return json({ suppliers });
+            }
+            if (url.pathname.endsWith('/api/v1/suppliers') && req.method() === 'POST') {
+              createdPayload = JSON.parse(req.postData() || '{}');
+              return json({ id: 202, ...createdPayload, current_balance: 0 }, 201);
+            }
+            if (url.pathname.match(/\/api\/v1\/suppliers\/101$/) && req.method() === 'PUT') {
+              updatedPayload = JSON.parse(req.postData() || '{}');
+              return json({ id: 101, ...updatedPayload, current_balance: 2500 });
+            }
+            return json({});
+          });
+
+          await page.goto('http://127.0.0.1:4185/inventory/suppliers', { waitUntil: 'networkidle' });
+          await page.getByRole('heading', { name: 'Suppliers' }).waitFor();
+          await page.getByText('Existing Supplier').waitFor();
+          await page.getByText('₹2,500').waitFor();
+
+          await page.getByRole('button', { name: /Add supplier/i }).click();
+          const form = page.locator('form');
+          await form.getByLabel('Name').fill('Runtime Supplier');
+          await form.getByLabel('Mobile').fill('9000000002');
+          await form.getByLabel('Email').fill('runtime@example.com');
+          await form.getByLabel('GST number').fill('36ABCDE9999F1Z5');
+          await form.getByLabel('Credit limit').fill('15000');
+          await form.getByLabel('Address').fill('Hyderabad');
+          await form.getByRole('button', { name: /Create supplier/i }).click();
+          await page.getByText('Runtime Supplier').waitFor();
+
+          const canonicalGets = calls.filter(c => c.startsWith('GET /api/v1/suppliers'));
+          const canonicalPosts = calls.filter(c => c === 'POST /api/v1/suppliers');
+          const legacySupplierCalls = calls.filter(c => /\/api\/suppliers(?:\?|$|\/)/.test(c) && !c.includes('/api/v1/suppliers'));
+          const hasCurrentBalanceMutation = createdPayload && Object.prototype.hasOwnProperty.call(createdPayload, 'current_balance');
+
+          console.log('CH09_RUNTIME_UI_PASS');
+          console.log('CH09_CALLS=' + calls.join(' | '));
+          console.log('CH09_CREATE_PAYLOAD=' + JSON.stringify(createdPayload));
+          console.log('CH09_CANONICAL_GETS=' + canonicalGets.length);
+          console.log('CH09_CANONICAL_POSTS=' + canonicalPosts.length);
+          console.log('CH09_LEGACY_SUPPLIER_CALLS=' + legacySupplierCalls.length);
+          console.log('CH09_CURRENT_BALANCE_MUTATION=' + Boolean(hasCurrentBalanceMutation));
+
+          if (canonicalGets.length < 2) throw new Error('Expected canonical supplier list load before and after create.');
+          if (canonicalPosts.length !== 1) throw new Error('Expected exactly one canonical supplier create request.');
+          if (legacySupplierCalls.length !== 0) throw new Error('Legacy supplier API path was used.');
+          if (!createdPayload || createdPayload.name !== 'Runtime Supplier' || createdPayload.credit_limit !== 15000 || createdPayload.branch_id !== 'branch-001') throw new Error('Supplier create payload did not preserve required master data.');
+          if (hasCurrentBalanceMutation) throw new Error('Supplier UI attempted to mutate current_balance.');
+
+          await browser.close();
+          EOF
+          node /tmp/ch09-runtime.mjs
+
+      - name: Record package gate result
+        if: always()
+        shell: bash
+        run: |
+          echo "CH09_PACKAGE_SCRIPT_EXIT=${{ steps.package_gate.outputs.exit_code }}"
+          if [ "${{ steps.package_gate.outputs.exit_code }}" != "0" ]; then
+            echo "CH09_OVERALL_AUTOMATED_GATE=FAIL"
+            exit 1
+          fi
+          echo "CH09_OVERALL_AUTOMATED_GATE=PASS"
