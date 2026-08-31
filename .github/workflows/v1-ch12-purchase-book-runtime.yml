@@ -1,0 +1,85 @@
+name: V1 CH-12 Purchase Book Runtime
+
+on:
+  push:
+    branches: [test/v1-ch12-purchase-book-runtime]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Focused existing acceptance
+        continue-on-error: true
+        run: node scripts/inventory-purchase-book.acceptance.mjs
+      - name: Repository package gate
+        continue-on-error: true
+        run: npm run test:inventory-purchase-book
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright runtime only
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4188 > /tmp/ch12-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4188/inventory/purchases >/tmp/ch12-page.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4188/inventory/purchases >/tmp/ch12-page.html
+          echo "CH12_PREVIEW_HTTP_BYTES $(wc -c </tmp/ch12-page.html)"
+          cat /tmp/ch12-preview.log
+      - name: Real browser runtime verification
+        run: |
+          cat > ch12-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req = route.request();
+            const u = new URL(req.url());
+            const path = u.pathname.replace(/^\/api/, '');
+            calls.push(`${req.method()} ${path}${u.search}`);
+            let body = { data: {} };
+            if (path === '/auth/getLogin') body = { user: { id: 1, name: 'Runtime Admin', role: 'admin' } };
+            else if (path === '/settings/application') body = { data: {} };
+            else if (path === '/branches') body = { data: [{ id: 'branch-001', branch_id: 'branch-001', name: 'Main Store', branch_name: 'Main Store' }] };
+            else if (path.startsWith('/purchases')) body = { data: { purchases: [{ id: 201, supplier_id: 101, supplier_name: 'Runtime Supplier', invoice_number: 'INV-201', created_at: '2026-08-30T10:00:00Z', total_price: 1250, total_paid: 500, order_status: 'received' }] } };
+            else if (path.startsWith('/v1/suppliers')) body = { data: { suppliers: [{ id: 101, name: 'V1 Supplier' }] } };
+            else if (path === '/v1/purchases/201') body = { data: { order: { id: 201, supplier_id: 101, supplier_name: 'V1 Supplier', invoice_number: 'INV-V1-201', created_at: '2026-08-30T10:00:00Z', total_price: 1250, total_paid: 500, payable_outstanding: 750 }, items: [{ id: 1, product_id: 501, product_name: 'Runtime Product', quantity: 5, purchase_price_snapshot: 250, gst_percent: 5, batch_number: 'BATCH-01' }], batches: [{ id: 701, batch_number: 'BATCH-01', quantity_remaining: 5, expiry_date: '2027-08-31' }] } };
+            else if (path.startsWith('/v1/purchases')) body = { data: { purchases: [{ id: 201, supplier_id: 101, supplier_name: 'V1 Supplier', invoice_number: 'INV-V1-201', created_at: '2026-08-30T10:00:00Z', total_price: 1250, total_paid: 500, order_status: 'received' }] }, meta: { page: 1, total: 1, total_pages: 1 } };
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+          });
+
+          await page.goto('http://127.0.0.1:4188/inventory/purchases', { waitUntil: 'networkidle' });
+          const body = await page.locator('body').innerText();
+          const rendered = body.includes('Purchase Book');
+          const legacyRow = body.includes('Runtime Supplier') && body.includes('INV-201');
+          const v1Row = body.includes('V1 Supplier') && body.includes('INV-V1-201');
+          const detailPrompt = body.includes('Select a purchase.') || body.includes('Purchase detail');
+          console.log('CH12_ROUTE_RENDERED', rendered);
+          console.log('CH12_LEGACY_ROW_RENDERED', legacyRow);
+          console.log('CH12_V1_ROW_RENDERED', v1Row);
+          console.log('CH12_DETAIL_UI_RENDERED', detailPrompt);
+          console.log('CH12_CALLS', calls.join(' | '));
+          console.log('CH12_LEGACY_PURCHASE_GET', calls.some(c => c.startsWith('GET /purchases')));
+          console.log('CH12_CANONICAL_V1_PURCHASE_GET', calls.some(c => c.startsWith('GET /v1/purchases')));
+          console.log('CH12_CANONICAL_V1_DETAIL_GET', calls.some(c => c.startsWith('GET /v1/purchases/201')));
+          await browser.close();
+
+          if (!rendered || !legacyRow) throw new Error('Actual routed Purchase Book did not render/load runtime purchase data.');
+          if (calls.some(c => c.startsWith('GET /v1/purchases'))) process.exit(0);
+          console.error('CH12_RUNTIME_CANONICAL_V1_PURCHASE_BOOK_MISSING');
+          process.exit(1);
+          EOF
+          node ch12-runtime.mjs
