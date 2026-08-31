@@ -42,70 +42,62 @@ jobs:
           curl -fsS -D /tmp/ch09.headers http://127.0.0.1:4185/inventory/suppliers -o /tmp/ch09.html
           echo "CH09_PREVIEW_HTTP=$(head -n 1 /tmp/ch09.headers | tr -d '\r')"
           echo "CH09_PREVIEW_BYTES=$(wc -c < /tmp/ch09.html)"
-      - name: Real browser supplier create and edit flow
+      - name: Real browser actual routed supplier flow
         shell: bash
         run: |
           cat > .ch09-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage();
-          const calls = [];
-          let createdPayload = null;
-          let updatedPayload = null;
-          let listCount = 0;
+          const calls=[]; let createdPayload=null; let listCount=0;
           await page.route('**/api/**', async route => {
-            const req = route.request(); const url = new URL(req.url());
-            calls.push(`${req.method()} ${url.pathname}${url.search}`);
-            const json = (body, status=200) => route.fulfill({status, contentType:'application/json', body:JSON.stringify(body)});
-            if (url.pathname.endsWith('/api/auth/getLogin')) return json({ user: { id:1, name:'Runtime Admin', role:'admin' } });
-            if (url.pathname.endsWith('/api/settings/application')) return json({});
-            if (url.pathname.endsWith('/api/branches')) return json([{id:'branch-001',branch_id:'branch-001',name:'Main Store',branch_name:'Main Store'}]);
-            if (url.pathname.endsWith('/api/v1/suppliers') && req.method()==='GET') {
+            const req=route.request(); const url=new URL(req.url()); const call=`${req.method()} ${url.pathname}${url.search}`; calls.push(call);
+            const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+            if(url.pathname.endsWith('/api/auth/getLogin')) return json({user:{id:1,name:'Runtime Admin',role:'admin'}});
+            if(url.pathname.endsWith('/api/settings/application')) return json({});
+            if(url.pathname.endsWith('/api/branches')) return json([{id:'branch-001',branch_id:'branch-001',name:'Main Store',branch_name:'Main Store'}]);
+            if(url.pathname.endsWith('/api/suppliers') && req.method()==='GET') {
               listCount++;
-              const base = {id:101,name:'Existing Supplier',mobile:'9000000001',email:'existing@example.com',gst_number:'36ABCDE1234F1Z5',credit_limit:10000,current_balance:2500,branch_id:'branch-001',is_active:true};
-              const added = {id:202,name:'Runtime Supplier',mobile:'9000000002',email:'runtime@example.com',gst_number:'36ABCDE9999F1Z5',credit_limit:15000,current_balance:0,branch_id:'branch-001',is_active:true};
-              return json({suppliers:listCount===1?[base]:[base,added]});
+              const existing={id:101,name:'Existing Supplier',mobile:'9000000001',email:'existing@example.com',gst_number:'36ABCDE1234F1Z5',credit_limit:10000,current_balance:2500,is_active:true};
+              const added={id:202,name:'Runtime Supplier',mobile:'9000000002',email:'runtime@example.com',gst_number:'36ABCDE9999F1Z5',credit_limit:15000,current_balance:700,branch_id:'branch-001',is_active:true};
+              return json(listCount===1?[existing]:[existing,added]);
             }
-            if (url.pathname.endsWith('/api/v1/suppliers') && req.method()==='POST') { createdPayload=JSON.parse(req.postData()||'{}'); return json({id:202,...createdPayload,current_balance:0},201); }
-            if (url.pathname.endsWith('/api/v1/suppliers/101') && req.method()==='PUT') { updatedPayload=JSON.parse(req.postData()||'{}'); return json({id:101,...updatedPayload,current_balance:2500}); }
+            if(url.pathname.endsWith('/api/suppliers') && req.method()==='POST') { createdPayload=JSON.parse(req.postData()||'{}'); return json({id:202,...createdPayload},201); }
+            if(url.pathname.endsWith('/api/v1/suppliers')) return json({suppliers:[{id:999,name:'Canonical Supplier'}]});
             return json({});
           });
-          await page.goto('http://127.0.0.1:4185/inventory/suppliers', {waitUntil:'networkidle'});
+          await page.goto('http://127.0.0.1:4185/inventory/suppliers',{waitUntil:'networkidle'});
           await page.getByRole('heading',{name:'Suppliers'}).waitFor();
           await page.getByText('Existing Supplier').waitFor();
-          await page.getByRole('button',{name:/Add supplier/i}).click();
+          const openingBalanceVisible=await page.getByText('Opening balance').count().then(n=>n>0);
+          await page.getByRole('button',{name:/Add Supplier/i}).click();
           const form=page.locator('form');
           await form.getByLabel('Name').fill('Runtime Supplier');
           await form.getByLabel('Mobile').fill('9000000002');
           await form.getByLabel('Email').fill('runtime@example.com');
-          await form.getByLabel('GST number').fill('36ABCDE9999F1Z5');
+          await form.getByText('GSTIN').locator('..').getByRole('textbox').fill('36ABCDE9999F1Z5');
           await form.getByLabel('Credit limit').fill('15000');
-          await form.getByLabel('Address').fill('Hyderabad');
-          await form.getByRole('button',{name:/Create supplier/i}).click();
+          await form.getByLabel('Opening balance').fill('700');
+          const post=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/api/suppliers'));
+          await form.getByRole('button',{name:/Save supplier/i}).click(); await post;
           await page.getByText('Runtime Supplier').waitFor();
-          const row=page.getByRole('row').filter({hasText:'Existing Supplier'});
-          await row.getByRole('button',{name:/Edit/i}).click();
-          await form.getByLabel('Credit limit').fill('12000');
-          const put=page.waitForRequest(r=>r.method()==='PUT' && r.url().endsWith('/api/v1/suppliers/101'));
-          await form.getByRole('button',{name:/Save supplier/i}).click(); await put;
-          const gets=calls.filter(c=>c.startsWith('GET /api/v1/suppliers')).length;
-          const posts=calls.filter(c=>c==='POST /api/v1/suppliers').length;
-          const puts=calls.filter(c=>c==='PUT /api/v1/suppliers/101').length;
-          const legacy=calls.filter(c=>/\/api\/suppliers(?:\?|$|\/)/.test(c) && !c.includes('/api/v1/suppliers')).length;
-          const mutatesBalance=Boolean((createdPayload&&'current_balance' in createdPayload)||(updatedPayload&&'current_balance' in updatedPayload));
-          console.log('CH09_RUNTIME_UI_PASS');
+          const legacyGets=calls.filter(c=>c.startsWith('GET /api/suppliers')).length;
+          const legacyPosts=calls.filter(c=>c==='POST /api/suppliers').length;
+          const canonicalCalls=calls.filter(c=>c.includes('/api/v1/suppliers')).length;
+          const mutatesBalance=Boolean(createdPayload&&Object.prototype.hasOwnProperty.call(createdPayload,'current_balance'));
+          console.log('CH09_RUNTIME_UI_EXECUTED');
           console.log('CH09_CALLS='+calls.join(' | '));
           console.log('CH09_CREATE_PAYLOAD='+JSON.stringify(createdPayload));
-          console.log('CH09_UPDATE_PAYLOAD='+JSON.stringify(updatedPayload));
-          console.log(`CH09_CANONICAL_GETS=${gets} CH09_CANONICAL_POSTS=${posts} CH09_CANONICAL_PUTS=${puts}`);
-          console.log(`CH09_LEGACY_SUPPLIER_CALLS=${legacy} CH09_CURRENT_BALANCE_MUTATION=${mutatesBalance}`);
-          if(gets<3||posts!==1||puts!==1||legacy!==0||mutatesBalance) throw new Error('Supplier runtime contract mismatch');
-          if(createdPayload?.credit_limit!==15000||createdPayload?.branch_id!=='branch-001') throw new Error('Create payload mismatch');
-          if(updatedPayload?.credit_limit!==12000||updatedPayload?.branch_id!=='branch-001') throw new Error('Update payload mismatch');
+          console.log(`CH09_OPENING_BALANCE_VISIBLE=${openingBalanceVisible}`);
+          console.log(`CH09_LEGACY_GETS=${legacyGets} CH09_LEGACY_POSTS=${legacyPosts} CH09_CANONICAL_CALLS=${canonicalCalls} CH09_CURRENT_BALANCE_MUTATION=${mutatesBalance}`);
+          if(legacyGets<2||legacyPosts!==1) throw new Error('Actual routed supplier flow did not complete.');
+          if(!createdPayload||createdPayload.name!=='Runtime Supplier'||Number(createdPayload.credit_limit)!==15000) throw new Error('Create payload mismatch.');
+          if(canonicalCalls!==0||!openingBalanceVisible||!mutatesBalance) throw new Error('Expected current-main V1 contract drift was not observed.');
+          console.error('CH09_RUNTIME_CONTRACT_FAIL: routed page uses legacy /api/suppliers and mutates current_balance');
           await browser.close();
+          process.exit(2);
           EOF
           node .ch09-runtime.mjs
-          rm -f .ch09-runtime.mjs
       - name: Final automated gate
         if: always()
         shell: bash
