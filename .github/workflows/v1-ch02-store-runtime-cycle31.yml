@@ -1,0 +1,129 @@
+name: V1 CH-02 store runtime cycle31
+
+on:
+  push:
+    branches:
+      - test/ch02-store-runtime-cycle31
+  workflow_dispatch:
+
+jobs:
+  ch02-store-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused store acceptance
+        run: |
+          node scripts/store-migration.acceptance.mjs
+          npm run test:stores
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4194 > /tmp/ch02-preview.log 2>&1 &
+          echo $! > /tmp/ch02-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4194/stores >/tmp/ch02.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch02.html
+          echo "CH02_PREVIEW_BYTES=$(wc -c </tmp/ch02.html)"
+      - name: Real Chromium Store migration runtime verification
+        run: |
+          cat > ./ch02-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls=[];
+          const branches=[
+            {id:'branch-a',branch_id:'branch-a',store_number:'STORE-001',name:'Alpha Store',location:'Hyderabad',is_active:true},
+            {id:'branch-b',branch_id:'branch-b',store_number:'STORE-002',name:'Beta Store',location:'Secunderabad',is_active:true}
+          ];
+          let createdPayload=null;
+          let deviceBranchReads=[];
+          page.on('request', req => {
+            if (req.url().includes('/api/')) calls.push(`${req.method()} ${new URL(req.url()).pathname}${new URL(req.url()).search}`);
+          });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req=route.request();
+            const u=new URL(req.url());
+            const p=u.pathname;
+            const method=req.method();
+            let status=200;
+            let body={data:{}};
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            else if (p.endsWith('/branches') && method==='GET') body={data:branches};
+            else if (p.endsWith('/branches') && method==='POST') {
+              createdPayload=req.postDataJSON();
+              const created={id:'branch-new',branch_id:'branch-new',store_number:createdPayload.store_number,name:createdPayload.name,location:createdPayload.location,is_active:true};
+              branches.push(created);
+              body={data:created};
+            } else if (/\/branches\/[^/]+\/devices$/.test(p) && method==='GET') {
+              const id=p.split('/').at(-2);
+              deviceBranchReads.push(id);
+              body={data:[{id:`device-${id}`,device_id:`device-${id}`,device_name:`POS for ${id}`,store_number:branches.find(b=>b.id===id)?.store_number||'',pos_no:'POS-01',touchpoint_id:'TP-01',is_active:true}]};
+            } else if (p.endsWith('/pos-registration/requests') && method==='GET') body={data:[]};
+            else if (p.endsWith('/pos-registration/setup-codes') && method==='POST') body={data:{setup_code:'123456',expires_at:new Date(Date.now()+900000).toISOString()}};
+            await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+          });
+
+          await page.goto('http://127.0.0.1:4194/stores',{waitUntil:'networkidle'});
+          const initialText=await page.locator('body').innerText();
+          const routeRendered=page.url().endsWith('/stores');
+          const initialStoreNumber=initialText.includes('STORE-001') && initialText.includes('STORE-002');
+          await page.getByRole('button',{name:/Add store/i}).click();
+          await page.getByPlaceholder('STORE-001').fill('STORE-003');
+          await page.getByPlaceholder('Main Store').fill('Gamma Store');
+          await page.getByPlaceholder('Hyderabad').fill('Warangal');
+          await page.getByRole('button',{name:'Create',exact:true}).click();
+          await page.getByText('STORE-003',{exact:true}).waitFor({timeout:5000});
+          const createdVisible=(await page.locator('body').innerText()).includes('Gamma Store');
+          const createPayloadOk=createdPayload?.store_number==='STORE-003' && createdPayload?.name==='Gamma Store' && createdPayload?.location==='Warangal';
+          const canonicalGet=calls.some(x=>x==='GET /api/branches');
+          const canonicalPost=calls.some(x=>x==='POST /api/branches');
+
+          const gammaRow=page.locator('.data-row').filter({hasText:'Gamma Store'});
+          await gammaRow.getByRole('link',{name:/Manage POS setup/i}).click();
+          await page.waitForLoadState('networkidle');
+          const finalUrl=page.url();
+          const posPage=(await page.locator('body').innerText()).includes('POS Setup & Approvals');
+          const gammaContext=(await page.locator('body').innerText()).includes('STORE-003 - Gamma Store');
+          const selected=await page.locator('label.field.compact select').inputValue().catch(()=> '');
+          const branchContextPreserved=selected==='branch-new';
+          const newBranchDevicesRead=deviceBranchReads.includes('branch-new');
+
+          console.log(`CH02_ROUTE_RENDERED=${routeRendered}`);
+          console.log(`CH02_INITIAL_STORE_NUMBERS_RENDERED=${initialStoreNumber}`);
+          console.log(`CH02_CREATED_STORE_RENDERED=${createdVisible}`);
+          console.log(`CH02_CREATE_PAYLOAD_OK=${createPayloadOk}`);
+          console.log(`CH02_CANONICAL_BRANCH_GET=${canonicalGet}`);
+          console.log(`CH02_CANONICAL_BRANCH_POST=${canonicalPost}`);
+          console.log(`CH02_POS_PAGE_RENDERED=${posPage}`);
+          console.log(`CH02_FINAL_URL=${finalUrl}`);
+          console.log(`CH02_GAMMA_CONTEXT_RENDERED=${gammaContext}`);
+          console.log(`CH02_SELECTED_BRANCH=${selected}`);
+          console.log(`CH02_BRANCH_CONTEXT_PRESERVED=${branchContextPreserved}`);
+          console.log(`CH02_NEW_BRANCH_DEVICES_READ=${newBranchDevicesRead}`);
+          console.log(`CH02_DEVICE_BRANCH_READS=${deviceBranchReads.join(',')}`);
+          console.log(`CH02_CALLS=${calls.join(' | ')}`);
+
+          if (!(routeRendered && initialStoreNumber && createdVisible && createPayloadOk && canonicalGet && canonicalPost && posPage && branchContextPreserved && newBranchDevicesRead)) {
+            console.error('CH02_RUNTIME_FAIL'); process.exitCode=1;
+          } else console.log('CH02_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ./ch02-runtime.mjs
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch02-preview.log || true
