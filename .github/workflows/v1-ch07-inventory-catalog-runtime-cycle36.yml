@@ -1,0 +1,126 @@
+name: V1 CH-07 inventory catalog runtime cycle36
+
+on:
+  push:
+    branches: [test/ch07-inventory-catalog-runtime-cycle36]
+  workflow_dispatch:
+
+jobs:
+  ch07-inventory-catalog-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused inventory catalog acceptance
+        run: node scripts/inventory-product-catalog.acceptance.mjs
+      - name: Repository inventory catalog package gate
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-catalog
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4199 > /tmp/ch07-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4199/inventory/catalog >/tmp/ch07.html && break; sleep 1; done
+          test -s /tmp/ch07.html
+      - name: Real Chromium inventory catalog runtime
+        id: runtime
+        continue-on-error: true
+        run: |
+          cat > ch07-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          page.on('request', r => {
+            if (r.url().includes('/api/')) {
+              const u = new URL(r.url());
+              calls.push(`${r.method()} ${u.pathname}${u.search}`);
+            }
+          });
+          const product = (id,name,barcode) => ({
+            id,name,barcode,company:'SHAJ Foods',category:'Dairy',selling_price:63,mrp:65,purchase_price:50,
+            gst_percentage:5,hsn_code:'0401',branch_id:'branch-1',is_batch_enabled:true,is_weight_based:false,
+            updated_at:'2026-09-01T00:00:00Z',inventory:{projected_net_quantity:12,sellable_quantity:10,physical_quantity:14,expired_quantity:2,provisional_deficit:2,is_low_stock:false,is_out_of_stock:false}
+          });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const r=route.request(), u=new URL(r.url()), p=u.pathname;
+            let body={data:{}};
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            else if (p.endsWith('/branches')) body={data:[{id:'branch-1',branch_id:'branch-1',name:'Main Store',branch_name:'Main Store'}]};
+            else if (p.endsWith('/v1/categories')) body={data:{categories:[{name:'Dairy',product_count:2}]},meta:{total:1,page:1,limit:200,total_pages:1}};
+            else if (p.endsWith('/v1/products')) {
+              const pg=Number(u.searchParams.get('page')||'1');
+              const search=u.searchParams.get('search')||'';
+              const rows=pg===2?[product('p2','Runtime Curd','8901234567891')]:[product('p1',search?'Runtime Milk Search':'Runtime Milk','8901234567890')];
+              body={data:{products:rows},meta:{page:pg,limit:25,total:26,total_pages:2}};
+            }
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:4199/inventory/catalog',{waitUntil:'networkidle'});
+          await page.waitForTimeout(500);
+          let text=await page.locator('body').innerText();
+          const routeOk=page.url().endsWith('/inventory/catalog');
+          const title=text.includes('Product Catalog');
+          const authority=text.includes('Central product master');
+          const truth=text.includes('Inventory truth boundary');
+          const initial=text.includes('Runtime Milk');
+          const inventoryFacts=text.includes('12 projected')&&text.includes('Sellable 10')&&text.includes('Physical 14')&&text.includes('Expired 2')&&text.includes('Offline deficit 2')&&text.includes('Batch tracked');
+          const canonicalProducts=calls.some(x=>x.startsWith('GET /api/v1/products'));
+          const canonicalCategories=calls.some(x=>x.startsWith('GET /api/v1/categories'));
+          const branchScoped=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('branch_id=branch-1'));
+          await page.getByPlaceholder('Product, brand/company or barcode').fill('Milk');
+          await page.waitForTimeout(700);
+          text=await page.locator('body').innerText();
+          const searchRendered=text.includes('Runtime Milk Search');
+          const searchQuery=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('search=Milk'));
+          await page.getByRole('button',{name:/Next/}).click();
+          await page.waitForTimeout(500);
+          text=await page.locator('body').innerText();
+          const page2Rendered=text.includes('Runtime Curd');
+          const page2Query=calls.some(x=>x.includes('/api/v1/products?')&&x.includes('page=2'));
+          const posLocalCall=calls.some(x=>x.includes('/status')||x.includes('/diagnostics')||x.includes('/sync'));
+          console.log(`CH07_ROUTE=${routeOk}`);
+          console.log(`CH07_TITLE=${title}`);
+          console.log(`CH07_CENTRAL_AUTHORITY=${authority}`);
+          console.log(`CH07_TRUTH_BOUNDARY=${truth}`);
+          console.log(`CH07_INITIAL_PRODUCT=${initial}`);
+          console.log(`CH07_INVENTORY_FACTS=${inventoryFacts}`);
+          console.log(`CH07_PRODUCTS_GET=${canonicalProducts}`);
+          console.log(`CH07_CATEGORIES_GET=${canonicalCategories}`);
+          console.log(`CH07_BRANCH_SCOPED=${branchScoped}`);
+          console.log(`CH07_SEARCH_RENDERED=${searchRendered}`);
+          console.log(`CH07_SEARCH_QUERY=${searchQuery}`);
+          console.log(`CH07_PAGE2_RENDERED=${page2Rendered}`);
+          console.log(`CH07_PAGE2_QUERY=${page2Query}`);
+          console.log(`CH07_POS_LOCAL_CALL=${posLocalCall}`);
+          console.log(`CH07_CALLS=${calls.join(' | ')}`);
+          if(!(routeOk&&title&&authority&&truth&&initial&&inventoryFacts&&canonicalProducts&&canonicalCategories&&branchScoped&&searchRendered&&searchQuery&&page2Rendered&&page2Query&&!posLocalCall)){
+            console.error('CH07_RUNTIME_FAIL'); process.exitCode=1;
+          } else console.log('CH07_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ch07-runtime.mjs
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch07-preview.log || true
+      - name: Certification result
+        if: always()
+        run: |
+          echo "PACKAGE_GATE_OUTCOME=${{ steps.package_gate.outcome }}"
+          echo "RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          if [ "${{ steps.package_gate.outcome }}" != "success" ]; then echo "CH07_PACKAGE_GATE_FAIL"; exit 1; fi
+          if [ "${{ steps.runtime.outcome }}" != "success" ]; then echo "CH07_RUNTIME_CERT_FAIL"; exit 1; fi
+          echo "CH07_CERTIFICATION_LAYER_PASS"
