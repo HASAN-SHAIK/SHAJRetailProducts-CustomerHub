@@ -1,0 +1,93 @@
+name: V1 CH-03 staff runtime cycle35
+
+on:
+  push:
+    branches: [test/ch03-staff-runtime-cycle35]
+  workflow_dispatch:
+
+jobs:
+  ch03-staff-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused staff acceptance
+        run: |
+          node scripts/staff-migration.acceptance.mjs
+          npm run test:staff
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4198 > /tmp/ch03-staff-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4198/staff >/tmp/ch03-staff.html && break; sleep 1; done
+          test -s /tmp/ch03-staff.html
+      - name: Real Chromium staff runtime
+        run: |
+          cat > ch03-staff-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage();
+          const calls=[]; const posts=[]; const puts=[];
+          let staff=[{id:'staff-1',staffId:'staff-1',name:'Runtime Cashier',phone:'9000000001',role:'Cashier',status:'active',branch_id:'branch-1',salary:18000,salesContribution:24000,orders:12}];
+          page.on('request',r=>{if(r.url().includes('/api/')){const u=new URL(r.url());calls.push(`${r.method()} ${u.pathname}${u.search}`)}});
+          await page.route('http://localhost:5001/api/**',async route=>{
+            const r=route.request(),u=new URL(r.url()),p=u.pathname,m=r.method(); let body={data:{}};
+            if(p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if(p.endsWith('/settings/application')) body={data:{}};
+            else if(p.endsWith('/branches')) body={data:[{id:'branch-1',branch_id:'branch-1',name:'Main Store'}]};
+            else if(p.endsWith('/users')) body={data:{users:[]}};
+            else if(p.endsWith('/v1/staff')&&m==='GET') body={data:{staff}};
+            else if(p.endsWith('/v1/staff')&&m==='POST'){const x=r.postDataJSON();posts.push(x);const c={id:'staff-2',...x};staff=[...staff,c];body={data:{staff:c}};}
+            else if(/\/v1\/staff\/[^/]+$/.test(p)&&m==='PUT'){const x=r.postDataJSON();puts.push(x);body={data:{staff:{...staff[0],...x}}};}
+            else if(p.includes('/staff/salaries')) body={data:{salaries:[]}};
+            else if(p.includes('/staff/performance')) body={data:{rows:[],summary:{}}};
+            else if(p.endsWith('/expenses')) body={data:{expenses:[]}};
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:4198/staff',{waitUntil:'networkidle'});
+          let text=await page.locator('body').innerText();
+          const listRoute=page.url().endsWith('/staff');
+          const listTitle=text.includes('Staff Management');
+          const existing=text.includes('Runtime Cashier');
+          const canonicalGet=calls.some(x=>x.startsWith('GET /api/v1/staff'));
+          const deactivate=await page.getByRole('button',{name:'Deactivate Runtime Cashier'}).count()>0;
+          await page.goto('http://127.0.0.1:4198/staff/new',{waitUntil:'networkidle'});
+          text=await page.locator('body').innerText();
+          const authority=text.includes('Central/PostgreSQL is authoritative for staff profile data.');
+          const rbacBoundary=text.includes('Login roles and permissions remain a separate access-control concern.');
+          const form=page.locator('form').filter({hasText:'Staff ID'}).first();
+          await form.getByLabel('Staff ID').fill('ST-002');
+          await form.getByLabel('Name').fill('Runtime New Staff');
+          await form.getByLabel('Phone').fill('9000000002');
+          await form.getByRole('button',{name:/Create|Save/}).click();
+          await page.waitForTimeout(300);
+          const canonicalPost=calls.some(x=>x==='POST /api/v1/staff');
+          const payloadOk=posts.length===1&&posts[0].staffId==='ST-002'&&posts[0].name==='Runtime New Staff'&&posts[0].branch_id==='branch-1';
+          console.log(`CH03_STAFF_LIST_ROUTE=${listRoute}`);
+          console.log(`CH03_STAFF_TITLE=${listTitle}`);
+          console.log(`CH03_STAFF_EXISTING_RENDERED=${existing}`);
+          console.log(`CH03_STAFF_CANONICAL_GET=${canonicalGet}`);
+          console.log(`CH03_STAFF_DEACTIVATE_ACTION=${deactivate}`);
+          console.log(`CH03_STAFF_AUTHORITY=${authority}`);
+          console.log(`CH03_STAFF_RBAC_BOUNDARY=${rbacBoundary}`);
+          console.log(`CH03_STAFF_CANONICAL_POST=${canonicalPost}`);
+          console.log(`CH03_STAFF_CREATE_PAYLOAD_OK=${payloadOk}`);
+          console.log(`CH03_STAFF_CALLS=${calls.join(' | ')}`);
+          if(!(listRoute&&listTitle&&existing&&canonicalGet&&deactivate&&authority&&rbacBoundary&&canonicalPost&&payloadOk)){console.error('CH03_STAFF_RUNTIME_FAIL');process.exitCode=1}else console.log('CH03_STAFF_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ch03-staff-runtime.mjs
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch03-staff-preview.log || true
