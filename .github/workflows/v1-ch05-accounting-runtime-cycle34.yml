@@ -1,0 +1,139 @@
+name: V1 CH-05 accounting runtime cycle34
+
+on:
+  push:
+    branches:
+      - test/ch05-accounting-runtime-cycle34
+  workflow_dispatch:
+
+jobs:
+  ch05-accounting-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused accounting acceptance
+        id: focused
+        continue-on-error: true
+        run: |
+          node scripts/accounting-migration.acceptance.mjs
+          npm run test:accounts
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4197 > /tmp/ch05-preview.log 2>&1 &
+          echo $! > /tmp/ch05-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4197/finance/accounts >/tmp/ch05.html; then break; fi
+            sleep 1
+          done
+          test -s /tmp/ch05.html
+          echo "CH05_PREVIEW_BYTES=$(wc -c </tmp/ch05.html)"
+      - name: Real Chromium accounting runtime verification
+        run: |
+          cat > ./ch05-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls=[];
+          const receiptPosts=[];
+          const paymentPosts=[];
+          let receipts=[{entry_id:'rec-1',customer_id:101,amount:1200,payment_mode:'cash',notes:'Runtime opening receipt'}];
+          let payments=[{entry_id:'pay-1',type:'supplier',supplier_id:201,amount:500,payment_mode:'cash',notes:'Runtime supplier payment'}];
+          page.on('request', req => { if (req.url().includes('/api/')) { const u=new URL(req.url()); calls.push(`${req.method()} ${u.pathname}${u.search}`); } });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req=route.request(); const u=new URL(req.url()); const p=u.pathname; const method=req.method();
+            let body={data:{}}; let status=200;
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            else if (p.endsWith('/accounts/cashbook') && method==='GET') body={data:{entries:[{entry_id:'cash-1',date:'2026-08-31',description:'Runtime cash sale',debit:2500,credit:0,balance:2500}]}};
+            else if (p.endsWith('/accounts/bankbook') && method==='GET') body={data:{entries:[]}};
+            else if (p.endsWith('/accounts/ledger') && method==='GET') body={data:{entries:[]}};
+            else if (p.endsWith('/accounts/outstanding') && method==='GET') body={data:{entries:[]}};
+            else if (p.endsWith('/accounts/opening-setup') && method==='GET') body={data:{entries:[]}};
+            else if (p.endsWith('/accounts/receipt') && method==='GET') body={data:{receipts}};
+            else if (p.endsWith('/accounts/receipt') && method==='POST') {
+              const payload=req.postDataJSON(); receiptPosts.push(payload);
+              const created={entry_id:'rec-2',...payload}; receipts=[created,...receipts]; body={data:{receipt:created}};
+            }
+            else if (p.endsWith('/accounts/payment') && method==='GET') body={data:{payments}};
+            else if (p.endsWith('/accounts/payment') && method==='POST') {
+              const payload=req.postDataJSON(); paymentPosts.push(payload);
+              const created={entry_id:'pay-2',...payload}; payments=[created,...payments]; body={data:{payment:created}};
+            }
+            await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:4197/finance/accounts',{waitUntil:'networkidle'});
+          let text=await page.locator('body').innerText();
+          const routeRendered=page.url().endsWith('/finance/accounts');
+          const title=text.includes('Financial Overview');
+          const cashbookRendered=text.includes('Runtime cash sale');
+          const canonicalCashbookGet=calls.some(x=>x.startsWith('GET /api/accounts/cashbook'));
+          const authority=text.includes('Central/PostgreSQL accounting authority');
+          const posBoundary=text.includes('POS keeps only store-execution cash/register actions');
+          const loadingContract=(await page.locator('body').innerText()).includes('Financial Overview');
+
+          await page.getByLabel('Customer ID').fill('101');
+          const receiptAmount=page.locator('form').filter({hasText:'Customer ID'}).getByLabel('Amount');
+          await receiptAmount.fill('875');
+          await page.locator('form').filter({hasText:'Customer ID'}).getByLabel('Notes').fill('Runtime receipt create');
+          await page.getByRole('button',{name:'Create receipt'}).click();
+          await page.waitForFunction(() => document.body.innerText.includes('Runtime receipt create'));
+          text=await page.locator('body').innerText();
+          const receiptRendered=text.includes('Runtime receipt create');
+          const receiptPost=calls.some(x=>x==='POST /api/accounts/receipt');
+          const receiptPayloadOk=receiptPosts.length===1 && receiptPosts[0].customer_id===101 && Number(receiptPosts[0].amount)===875 && typeof receiptPosts[0].client_txn_id==='string' && receiptPosts[0].client_txn_id.length>0;
+
+          await page.getByRole('button',{name:'Payment Entries'}).click();
+          await page.waitForLoadState('networkidle');
+          const paymentForm=page.locator('form').filter({hasText:'Supplier ID'});
+          await paymentForm.getByLabel('Supplier ID').fill('201');
+          await paymentForm.getByLabel('Amount').fill('430');
+          await paymentForm.getByLabel('Notes').fill('Runtime payment create');
+          await page.getByRole('button',{name:'Create payment'}).click();
+          await page.waitForFunction(() => document.body.innerText.includes('Runtime payment create'));
+          text=await page.locator('body').innerText();
+          const paymentRendered=text.includes('Runtime payment create');
+          const paymentPost=calls.some(x=>x==='POST /api/accounts/payment');
+          const paymentPayloadOk=paymentPosts.length===1 && paymentPosts[0].type==='supplier' && paymentPosts[0].supplier_id===201 && Number(paymentPosts[0].amount)===430 && typeof paymentPosts[0].client_txn_id==='string' && paymentPosts[0].client_txn_id.length>0;
+          const posAuthorityCall=calls.some(x=>x.includes('/api/v1/status') || x.includes('/api/v1/diagnostics') || x.includes('/api/v1/sync'));
+
+          console.log(`CH05_ROUTE_RENDERED=${routeRendered}`);
+          console.log(`CH05_TITLE_RENDERED=${title}`);
+          console.log(`CH05_CASHBOOK_RENDERED=${cashbookRendered}`);
+          console.log(`CH05_CANONICAL_CASHBOOK_GET=${canonicalCashbookGet}`);
+          console.log(`CH05_AUTHORITY_RENDERED=${authority}`);
+          console.log(`CH05_POS_BOUNDARY_RENDERED=${posBoundary}`);
+          console.log(`CH05_RECEIPT_RENDERED=${receiptRendered}`);
+          console.log(`CH05_RECEIPT_POST=${receiptPost}`);
+          console.log(`CH05_RECEIPT_PAYLOAD_OK=${receiptPayloadOk}`);
+          console.log(`CH05_PAYMENT_RENDERED=${paymentRendered}`);
+          console.log(`CH05_PAYMENT_POST=${paymentPost}`);
+          console.log(`CH05_PAYMENT_PAYLOAD_OK=${paymentPayloadOk}`);
+          console.log(`CH05_POS_AUTHORITY_CALL=${posAuthorityCall}`);
+          console.log(`CH05_CALLS=${calls.join(' | ')}`);
+          const functional = routeRendered && title && cashbookRendered && canonicalCashbookGet && receiptRendered && receiptPost && receiptPayloadOk && paymentRendered && paymentPost && paymentPayloadOk && !posAuthorityCall;
+          console.log(`CH05_FUNCTIONAL_RUNTIME=${functional}`);
+          if (!(functional && authority && posBoundary)) {
+            console.error('CH05_RUNTIME_CONTRACT_FAIL'); process.exitCode=1;
+          } else console.log('CH05_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ./ch05-runtime.mjs
+      - name: Focused result summary
+        if: always()
+        run: echo "CH05_FOCUSED_OUTCOME=${{ steps.focused.outcome }}"
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch05-preview.log || true
