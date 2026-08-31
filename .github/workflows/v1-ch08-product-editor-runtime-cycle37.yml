@@ -1,0 +1,132 @@
+name: V1 CH-08 product editor runtime cycle37
+
+on:
+  push:
+    branches: [test/ch08-product-editor-runtime-cycle37]
+  workflow_dispatch:
+
+jobs:
+  ch08-product-editor-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused product editor acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-product-editor.acceptance.mjs
+      - name: Repository product editor package gate
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-editor
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4200 > /tmp/ch08-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4200/inventory/products/new >/tmp/ch08.html && break; sleep 1; done
+          test -s /tmp/ch08.html
+      - name: Real Chromium product editor runtime
+        id: runtime
+        continue-on-error: true
+        run: |
+          cat > ch08-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          const requestBodies = [];
+          page.on('request', r => {
+            if (r.url().includes('/api/')) {
+              const u = new URL(r.url());
+              calls.push(`${r.method()} ${u.pathname}${u.search}`);
+              if (r.method() !== 'GET') requestBodies.push({method:r.method(),path:u.pathname,body:r.postDataJSON?.()});
+            }
+          });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const r=route.request(), u=new URL(r.url()), p=u.pathname;
+            let body={data:{}};
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            else if (p.endsWith('/branches')) body={data:[{id:'branch-1',branch_id:'branch-1',name:'Main Store',branch_name:'Main Store'}]};
+            else if (p.endsWith('/v1/categories')) body={data:{categories:[{name:'Dairy'}]}};
+            else if (p.endsWith('/v1/products/v1-edit-1')) body={data:{product:{id:'v1-edit-1',name:'Existing Runtime Product',category:'Dairy',company:'SHAJ',barcode:'8901000000001',selling_price:55,mrp:60,purchase_price:45,gst_percentage:5,branch_id:'branch-1',is_weight_based:false,is_batch_enabled:true}}};
+            else if (p.endsWith('/products')) body={data:{id:'legacy-created'}};
+            else if (p.endsWith('/v1/products')) body={data:{product:{id:'v1-created'}}};
+            else if (r.method()==='PUT' && p.endsWith('/v1/products/v1-edit-1')) body={data:{product:{id:'v1-edit-1'}}};
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+
+          await page.goto('http://127.0.0.1:4200/inventory/products/new',{waitUntil:'networkidle'});
+          await page.waitForTimeout(300);
+          let text=await page.locator('body').innerText();
+          const addRoute=page.url().endsWith('/inventory/products/new');
+          const addTitle=text.includes('Add Product');
+          const auditBoundary=text.includes('Stock audit boundary');
+          const purchaseBoundary=text.includes('Batch quantities and expiry dates are created by purchase receiving.');
+          const openingStockVisible=await page.getByText('Opening stock',{exact:true}).count()>0;
+          const categoryListPresent=await page.locator('datalist#product-categories').count()>0;
+
+          const labels=page.locator('label');
+          const name=page.getByLabel('Name').or(page.getByLabel('Product name *'));
+          if(await name.count()) await name.first().fill('Runtime New Product');
+          const selling=page.getByLabel('Selling price').or(page.getByLabel('Selling price *'));
+          if(await selling.count()) await selling.first().fill('50');
+          const purchase=page.getByLabel('Purchase price').or(page.getByLabel('Reference purchase cost'));
+          if(await purchase.count()) await purchase.first().fill('40');
+          if(openingStockVisible) await page.getByLabel('Opening stock').fill('7');
+          const submit=page.getByRole('button',{name:/Save product|Create product/});
+          if(await submit.count()){await submit.first().click();await page.waitForTimeout(400);}
+
+          const legacyPost=requestBodies.find(x=>x.method==='POST'&&x.path==='/api/products');
+          const v1Post=requestBodies.find(x=>x.method==='POST'&&x.path==='/api/v1/products');
+          const directStockMutation=Boolean(legacyPost?.body && Object.prototype.hasOwnProperty.call(legacyPost.body,'stock_quantity')) || Boolean(v1Post?.body && Object.prototype.hasOwnProperty.call(v1Post.body,'stock_quantity'));
+
+          await page.goto('http://127.0.0.1:4200/inventory/products/v1-edit-1/edit',{waitUntil:'networkidle'});
+          await page.waitForTimeout(300);
+          text=await page.locator('body').innerText();
+          const editRoute=page.url().includes('/inventory/products/v1-edit-1/edit');
+          const editTitle=text.includes('Edit Product');
+          const v1ProductGet=calls.some(x=>x.startsWith('GET /api/v1/products/v1-edit-1'));
+
+          console.log(`CH08_ADD_ROUTE=${addRoute}`);
+          console.log(`CH08_ADD_TITLE=${addTitle}`);
+          console.log(`CH08_AUDIT_BOUNDARY=${auditBoundary}`);
+          console.log(`CH08_PURCHASE_BOUNDARY=${purchaseBoundary}`);
+          console.log(`CH08_OPENING_STOCK_VISIBLE=${openingStockVisible}`);
+          console.log(`CH08_CATEGORY_DATALIST=${categoryListPresent}`);
+          console.log(`CH08_LEGACY_POST=${Boolean(legacyPost)}`);
+          console.log(`CH08_V1_POST=${Boolean(v1Post)}`);
+          console.log(`CH08_DIRECT_STOCK_MUTATION=${directStockMutation}`);
+          console.log(`CH08_EDIT_ROUTE=${editRoute}`);
+          console.log(`CH08_EDIT_TITLE=${editTitle}`);
+          console.log(`CH08_V1_PRODUCT_GET=${v1ProductGet}`);
+          console.log(`CH08_CALLS=${calls.join(' | ')}`);
+          const certified=addRoute&&addTitle&&auditBoundary&&purchaseBoundary&&!openingStockVisible&&categoryListPresent&&Boolean(v1Post)&&!legacyPost&&!directStockMutation&&editRoute&&editTitle&&v1ProductGet;
+          if(!certified){console.error('CH08_RUNTIME_CERTIFIED_EDITOR_NOT_LIVE');process.exitCode=1}else console.log('CH08_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ch08-runtime.mjs
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch08-preview.log || true
+      - name: Certification result
+        if: always()
+        run: |
+          echo "FOCUSED_OUTCOME=${{ steps.focused.outcome }}"
+          echo "PACKAGE_GATE_OUTCOME=${{ steps.package_gate.outcome }}"
+          echo "RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          if [ "${{ steps.focused.outcome }}" != "success" ]; then echo "CH08_FOCUSED_FAIL"; exit 1; fi
+          if [ "${{ steps.package_gate.outcome }}" != "success" ]; then echo "CH08_PACKAGE_GATE_FAIL"; exit 1; fi
+          if [ "${{ steps.runtime.outcome }}" != "success" ]; then echo "CH08_RUNTIME_CERT_FAIL"; exit 1; fi
+          echo "CH08_CERTIFICATION_LAYER_PASS"
