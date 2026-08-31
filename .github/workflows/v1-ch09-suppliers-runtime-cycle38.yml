@@ -75,7 +75,6 @@ jobs:
             }
             await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
           });
-
           await page.goto('http://127.0.0.1:4201/inventory/suppliers',{waitUntil:'networkidle'});
           await page.waitForTimeout(250);
           let text=await page.locator('body').innerText();
@@ -85,7 +84,6 @@ jobs:
           const authority=text.includes('Outstanding balance remains a Central financial projection');
           const masterBoundary=text.includes('balances are purchase/payment owned');
           const canonicalGet=calls.some(x=>x.startsWith('GET /api/v1/suppliers'));
-
           await page.getByLabel('Name').fill('Runtime New Supplier');
           await page.getByLabel('Mobile').fill('9000000002');
           await page.getByLabel('GST number').fill('36ABCDE5678F1Z9');
@@ -97,7 +95,6 @@ jobs:
           const created=text.includes('Runtime New Supplier');
           const post=mutations.find(x=>x.method==='POST'&&x.path==='/api/v1/suppliers');
           const postPayloadOk=Boolean(post?.body && post.body.name==='Runtime New Supplier' && Number(post.body.credit_limit)===7500 && post.body.branch_id==='branch-1' && post.body.gst_number==='36ABCDE5678F1Z9' && !Object.prototype.hasOwnProperty.call(post.body,'current_balance'));
-
           const row=page.locator('tr').filter({hasText:'Runtime New Supplier'});
           await row.getByRole('button',{name:/Edit/}).click();
           await page.getByLabel('Credit limit').fill('8000');
@@ -108,7 +105,6 @@ jobs:
           const canonicalPost=Boolean(post);
           const canonicalPut=Boolean(put);
           const localAuthorityCall=calls.some(x=>/indexeddb|localstorage|pos\/status|pos\/diagnostic|sync/i.test(x));
-
           console.log(`CH09_ROUTE=${routeOk}`);
           console.log(`CH09_TITLE=${title}`);
           console.log(`CH09_INITIAL_SUPPLIER=${initial}`);
@@ -127,6 +123,11 @@ jobs:
           await browser.close();
           EOF
           node ch09-runtime.mjs
+      - name: Runtime outcome verdict
+        if: always()
+        run: |
+          echo "RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          if [ "${{ steps.runtime.outcome }}" != "success" ]; then exit 1; fi
       - name: Preview log
         if: always()
         run: cat /tmp/ch09-preview.log || true
