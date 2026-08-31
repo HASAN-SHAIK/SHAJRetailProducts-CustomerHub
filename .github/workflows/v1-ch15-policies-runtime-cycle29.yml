@@ -30,20 +30,18 @@ jobs:
       - name: Start preview
         run: |
           npm run preview -- --host 127.0.0.1 --port 4192 > /tmp/ch15-preview.log 2>&1 &
-          echo $! > /tmp/ch15-preview.pid
           for i in {1..30}; do curl -fsS http://127.0.0.1:4192/inventory/policies >/tmp/ch15.html && break; sleep 1; done
           test -s /tmp/ch15.html
       - name: Real Chromium policy-route verification
         run: |
-          cat > /tmp/ch15-runtime.mjs <<'EOF'
+          cat > ./ch15-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({headless:true});
           const page = await browser.newPage();
           const calls = [];
           await page.route('**/api/**', async route => {
             const u = new URL(route.request().url()); calls.push(`${route.request().method()} ${u.pathname}${u.search}`);
-            const p = u.pathname;
-            let body = {};
+            const p = u.pathname; let body = {};
             if (p.includes('/auth/getLogin')) body = { id: 1, name: 'Runtime Admin', role: 'admin', email: 'runtime@example.com' };
             else if (p.includes('/branches')) body = { data: [{id:'branch-001', name:'Runtime Store'}] };
             else if (p.includes('/configuration/catalog')) body = { data: [] };
@@ -52,8 +50,7 @@ jobs:
             await route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(body)});
           });
           await page.goto('http://127.0.0.1:4192/inventory/policies', {waitUntil:'networkidle'});
-          const finalUrl = page.url();
-          const text = await page.locator('body').innerText();
+          const finalUrl = page.url(); const text = await page.locator('body').innerText();
           const routeRendered = finalUrl.endsWith('/inventory/policies');
           const titleRendered = text.includes('Inventory Policies');
           const boundaryRendered = text.includes('Inventory policy authority');
@@ -64,12 +61,10 @@ jobs:
           console.log(`CH15_HIERARCHY_RENDERED=${hierarchyRendered}`);
           console.log(`CH15_CALLS=${calls.join(' | ')}`);
           await browser.close();
-          if (!routeRendered || !titleRendered || !boundaryRendered || !hierarchyRendered) {
-            console.error('CH15_RUNTIME_CERTIFIED_WRAPPER_MISSING'); process.exit(1);
-          }
+          if (!routeRendered || !titleRendered || !boundaryRendered || !hierarchyRendered) { console.error('CH15_RUNTIME_CERTIFIED_WRAPPER_MISSING'); process.exit(1); }
           console.log('CH15_RUNTIME_UI_PASS');
           EOF
-          node /tmp/ch15-runtime.mjs
+          node ./ch15-runtime.mjs
       - name: Preview log
         if: always()
         run: cat /tmp/ch15-preview.log || true
