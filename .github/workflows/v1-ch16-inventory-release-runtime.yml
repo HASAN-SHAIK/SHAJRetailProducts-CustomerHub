@@ -1,0 +1,142 @@
+name: V1 CH-16 Inventory Release Runtime
+
+on:
+  push:
+    branches: [test/ch16-inventory-release-runtime]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Existing release certification acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-release-cert.acceptance.mjs
+
+      - name: Repository release gate
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-release
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4191 > /tmp/ch16-preview.log 2>&1 &
+          echo $! > /tmp/ch16-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4191/ >/tmp/ch16-shell.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4191/ >/tmp/ch16-shell.html
+          echo "CH16_PREVIEW_BYTES=$(wc -c </tmp/ch16-shell.html)"
+          cat /tmp/ch16-preview.log
+
+      - name: Real Chromium Inventory V1 route smoke
+        id: runtime
+        continue-on-error: true
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+
+          await page.route('**/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            calls.push(`${req.method()} ${url.pathname}${url.search}`);
+            const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+            if (url.pathname === '/api/auth/getLogin') return json({ user: { id: 1, name: 'Runtime Admin', role: 'admin' } });
+            if (url.pathname === '/api/settings/application') return json({ data: {} });
+            if (url.pathname === '/api/branches') return json({ data: [{ id: 'branch-001', branch_id: 'branch-001', name: 'Main Store', branch_name: 'Main Store' }] });
+            if (url.pathname === '/api/configuration/catalog') return json({ settings: [{ key: 'inventory.allow_negative_stock', group: 'inventory', type: 'boolean', scopes: ['tenant','branch','device'] }] });
+            if (url.pathname === '/api/configuration/scopes/tenant/current') return json({ overrides: {}, effective: { values: { 'inventory.allow_negative_stock': false }, sources: { 'inventory.allow_negative_stock': { scope_type: 'system' } }, etag: 'ch16-etag' } });
+            if (url.pathname === '/api/reports/inventory') return json({ data: { total_stock: 10, physical_stock: 10, sellable_stock: 10, expired_stock: 0, low_stock_products: 0, out_of_stock_products: 0, provisional_deficit: 0, stock_value_purchase: 1000, stock_basis: 'CH16 runtime' } });
+            if (url.pathname === '/api/v1/products') return json({ data: { products: [] } });
+            if (url.pathname === '/api/products') return json({ data: { products: [] } });
+            if (url.pathname === '/api/suppliers') return json({ data: [] });
+            if (url.pathname === '/api/purchases') return json({ data: [] });
+            if (url.pathname === '/api/purchase-returns') return json({ data: [] });
+            return json({ data: {} });
+          });
+
+          const cases = [
+            ['/inventory/catalog', 'Product Catalog'],
+            ['/inventory/products/new', 'Add Product'],
+            ['/inventory/suppliers', 'Suppliers'],
+            ['/inventory/purchases/new', 'Purchase Entry'],
+            ['/inventory/purchases', 'Purchase'],
+            ['/inventory/purchase-returns', 'Purchase Returns'],
+            ['/inventory/stock-adjustments', 'Manual correction'],
+            ['/analytics/inventory', 'Inventory Analytics'],
+            ['/inventory/policies', 'Inventory Policies'],
+          ];
+
+          const results = [];
+          for (const [path, expectedText] of cases) {
+            await page.goto(`http://127.0.0.1:4191${path}`, { waitUntil: 'networkidle' });
+            const body = await page.locator('body').innerText();
+            const finalPath = new URL(page.url()).pathname;
+            const placeholder = body.includes('V1 workspace');
+            const expected = body.includes(expectedText);
+            results.push({ path, finalPath, expectedText, expected, placeholder, bodySample: body.slice(0, 240).replace(/\s+/g, ' ') });
+            console.log(`CH16_ROUTE ${path} final=${finalPath} expected=${expected} placeholder=${placeholder}`);
+          }
+
+          const required = new Map(results.map(r => [r.path, r]));
+          const purchaseEntryLive = required.get('/inventory/purchases/new')?.finalPath === '/inventory/purchases/new' && required.get('/inventory/purchases/new')?.expected;
+          const stockAdjustmentsLive = required.get('/inventory/stock-adjustments')?.finalPath === '/inventory/stock-adjustments' && required.get('/inventory/stock-adjustments')?.expected && !required.get('/inventory/stock-adjustments')?.placeholder;
+          const policiesLive = required.get('/inventory/policies')?.finalPath === '/inventory/policies' && required.get('/inventory/policies')?.expected;
+          const policyBoundaryRendered = (await page.goto('http://127.0.0.1:4191/inventory/policies', { waitUntil: 'networkidle' }), await page.locator('body').innerText()).includes('Inventory policy authority');
+
+          console.log(`CH16_PURCHASE_ENTRY_LIVE=${purchaseEntryLive}`);
+          console.log(`CH16_STOCK_ADJUSTMENTS_LIVE=${stockAdjustmentsLive}`);
+          console.log(`CH16_POLICIES_LIVE=${policiesLive}`);
+          console.log(`CH16_POLICY_BOUNDARY_RENDERED=${policyBoundaryRendered}`);
+          console.log('CH16_CALLS=' + calls.join(' | '));
+          console.log('CH16_RESULTS=' + JSON.stringify(results));
+
+          await browser.close();
+
+          if (!purchaseEntryLive || !stockAdjustmentsLive || !policiesLive || !policyBoundaryRendered) {
+            throw new Error('Inventory V1 runtime release smoke did not satisfy all certified route/boundary requirements.');
+          }
+          console.log('CH16_RUNTIME_RELEASE_SMOKE_PASS');
+          NODE
+
+      - name: Stop preview
+        if: always()
+        run: |
+          if [ -f /tmp/ch16-preview.pid ]; then kill $(cat /tmp/ch16-preview.pid) || true; fi
+
+      - name: Final CH-16 gate
+        if: always()
+        run: |
+          echo "Focused acceptance outcome: ${{ steps.focused.outcome }}"
+          echo "Repository package gate outcome: ${{ steps.package_gate.outcome }}"
+          echo "Runtime outcome: ${{ steps.runtime.outcome }}"
+          if [ "${{ steps.focused.outcome }}" != "success" ] || [ "${{ steps.package_gate.outcome }}" != "success" ] || [ "${{ steps.runtime.outcome }}" != "success" ]; then
+            echo "CH16_FINAL=FAIL"
+            exit 1
+          fi
+          echo "CH16_FINAL=PASS"
