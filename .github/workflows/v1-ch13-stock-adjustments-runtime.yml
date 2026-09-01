@@ -52,7 +52,7 @@ jobs:
       - name: Real Chromium stock-adjustments verification
         shell: bash
         run: |
-          cat > /tmp/ch13.mjs <<'EOF'
+          cat > ./ch13-runtime.mjs <<'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({headless:true});
           const page = await browser.newPage();
@@ -88,4 +88,4 @@ jobs:
           await browser.close();
           if (placeholder || !manual) process.exit(1);
           EOF
-          node /tmp/ch13.mjs
+          node ./ch13-runtime.mjs
