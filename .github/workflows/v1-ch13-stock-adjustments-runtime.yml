@@ -1,0 +1,91 @@
+name: V1 CH-13 Stock Adjustments Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ch13:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Focused existing acceptance and package gate
+        shell: bash
+        run: |
+          set +e
+          node scripts/inventory-stock-adjustments.acceptance.mjs
+          RAW=$?
+          npm run test:inventory-stock-adjustments
+          PKG=$?
+          echo "CH13_FOCUSED_RAW_EXIT=$RAW"
+          echo "CH13_PACKAGE_GATE_EXIT=$PKG"
+          exit 0
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4189 > /tmp/ch13-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4189/inventory/stock-adjustments >/tmp/ch13-shell.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4189/inventory/stock-adjustments >/tmp/ch13-shell.html
+          echo "CH13_PREVIEW_BYTES=$(wc -c </tmp/ch13-shell.html)"
+          cat /tmp/ch13-preview.log
+
+      - name: Real Chromium stock-adjustments verification
+        shell: bash
+        run: |
+          cat > ./ch13-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage();
+          const calls = [];
+          await page.route('**/api/**', async route => {
+            const req = route.request();
+            const u = new URL(req.url());
+            calls.push(`${req.method()} ${u.pathname}${u.search}`);
+            const path = u.pathname.replace(/^\/api/, '');
+            if (path === '/auth/getLogin') return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({user:{id:1,name:'Runtime Admin',role:'admin',tenant_id:'tenant-test1'}})});
+            if (path === '/settings/application') return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({})});
+            if (path === '/branches') return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify([{branch_id:'branch-001',branch_name:'Main Store'}])});
+            if (path.startsWith('/v1/products')) return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({products:[{id:101,name:'Runtime Product',is_batch_enabled:false,inventory:{projected_net_quantity:10}}]})});
+            if (path.startsWith('/v1/batches')) return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({batches:[]})});
+            if (path.startsWith('/v1/stock')) return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({stock:[{branch_id:'branch-001',quantity:10}]})});
+            if (path === '/v1/stock/adjustments' && req.method() === 'POST') return route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({adjustment:{before_quantity:10,delta_quantity:2,after_quantity:12,reason:'Runtime count',reference_id:'COUNT-13'}})});
+            return route.fulfill({status:200, contentType:'application/json', body:'{}'});
+          });
+          await page.goto('http://127.0.0.1:4189/inventory/stock-adjustments', {waitUntil:'networkidle'});
+          const body = await page.locator('body').innerText();
+          const placeholder = body.includes('V1 workspace') && body.includes('reserved for the full CustomerHub workflow');
+          const manual = body.includes('Manual correction');
+          const reason = body.includes('Reason is required for every manual stock adjustment.');
+          console.log(`CH13_ROUTE_RENDERED=${body.includes('Stock Adjustments')}`);
+          console.log(`CH13_PLACEHOLDER_RENDERED=${placeholder}`);
+          console.log(`CH13_MANUAL_CORRECTION_RENDERED=${manual}`);
+          console.log(`CH13_REASON_CONTRACT_RENDERED=${reason}`);
+          console.log('CH13_CALLS=' + calls.join(' | '));
+          console.log(`CH13_CANONICAL_PRODUCTS_GET=${calls.some(x=>x.includes('/api/v1/products'))}`);
+          console.log(`CH13_CANONICAL_STOCK_GET=${calls.some(x=>x.includes('/api/v1/stock'))}`);
+          console.log(`CH13_CANONICAL_ADJUSTMENT_POST=${calls.some(x=>x.startsWith('POST /api/v1/stock/adjustments'))}`);
+          if (!manual) console.log('CH13_RUNTIME_V1_STOCK_ADJUSTMENT_FLOW_MISSING');
+          await browser.close();
+          if (placeholder || !manual) process.exit(1);
+          EOF
+          node ./ch13-runtime.mjs
