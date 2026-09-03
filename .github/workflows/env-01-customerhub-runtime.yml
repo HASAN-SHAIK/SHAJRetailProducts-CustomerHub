@@ -47,7 +47,7 @@ jobs:
           page.on('pageerror', e => errors.push(`pageerror:${e.message}`));
           page.on('console', m => { if (m.type() === 'error') errors.push(`console:${m.text()}`); });
           await page.route('**/api/auth/getLogin**', async route => {
-            await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ message: 'unauthenticated runtime smoke' }) });
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: null }) });
           });
           const response = await page.goto('http://127.0.0.1:4193/', { waitUntil: 'networkidle', timeout: 30000 });
           const titleVisible = await page.getByText('SHAJ Retail Hub', { exact: true }).isVisible().catch(() => false);
