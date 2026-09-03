@@ -1,0 +1,76 @@
+name: ENV-01 CustomerHub runtime verification
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  env01-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Smallest existing acceptance
+        run: npm run test:dashboard
+      - name: Production build
+        run: npm run build
+      - name: Install browser harness
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4193 > /tmp/env01-preview.log 2>&1 &
+          echo $! > /tmp/env01-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4193/ > /tmp/env01-index.html; then
+              echo "ENV01_PREVIEW_HTTP_BYTES=$(wc -c < /tmp/env01-index.html)"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/env01-preview.log
+          exit 1
+      - name: Real Chromium application startup
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const errors = [];
+          page.on('pageerror', e => errors.push(`pageerror:${e.message}`));
+          page.on('console', m => { if (m.type() === 'error') errors.push(`console:${m.text()}`); });
+          await page.route('**/api/auth/getLogin**', async route => {
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: null }) });
+          });
+          const response = await page.goto('http://127.0.0.1:4193/', { waitUntil: 'networkidle', timeout: 30000 });
+          const titleVisible = await page.getByText('SHAJ Retail Hub', { exact: true }).isVisible().catch(() => false);
+          const signInVisible = await page.getByRole('button', { name: 'Sign in' }).isVisible().catch(() => false);
+          const emailVisible = await page.getByLabel('Email').isVisible().catch(() => false);
+          console.log(`ENV01_HTTP_STATUS=${response?.status()}`);
+          console.log(`ENV01_FINAL_URL=${page.url()}`);
+          console.log(`ENV01_TITLE_VISIBLE=${titleVisible}`);
+          console.log(`ENV01_SIGNIN_VISIBLE=${signInVisible}`);
+          console.log(`ENV01_EMAIL_VISIBLE=${emailVisible}`);
+          console.log(`ENV01_BROWSER_ERRORS=${JSON.stringify(errors)}`);
+          await browser.close();
+          if (response?.status() !== 200 || !titleVisible || !signInVisible || !emailVisible || errors.length) {
+            console.error('ENV01_RUNTIME_STARTUP_FAIL');
+            process.exit(1);
+          }
+          console.log('ENV01_RUNTIME_STARTUP_PASS');
+          NODE
+      - name: Preview process evidence
+        if: always()
+        run: |
+          echo '--- preview log ---'
+          cat /tmp/env01-preview.log || true
+          if [ -f /tmp/env01-preview.pid ]; then
+            kill $(cat /tmp/env01-preview.pid) || true
+          fi
