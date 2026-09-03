@@ -1,0 +1,81 @@
+name: V1 CH-06 Certified Customer Runtime
+
+on:
+  push:
+    branches: [fix/ch06-certified-customers]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ch06-certified:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused customer acceptance
+        run: npm run test:customers
+      - name: Production build
+        run: npm run build
+      - name: Install browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4182 > /tmp/ch06-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4182/customers >/tmp/ch06.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4182/customers >/tmp/ch06.html
+          grep -q '<div id="root"></div>' /tmp/ch06.html
+      - name: Real browser certified customer path
+        run: |
+          cat > ./ch06-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          const pageErrors = [];
+          page.on('pageerror', error => pageErrors.push(String(error)));
+          await page.route('http://localhost:5001/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            calls.push(`${req.method()} ${url.pathname}${url.search}`);
+            let body = { data: {} };
+            if (url.pathname === '/api/auth/getLogin') {
+              body = { data: { user: { id: 1, name: 'Runtime Admin', email: 'admin@runtime.test', role: 'admin' } } };
+            } else if (url.pathname === '/api/settings/application') {
+              body = { data: { settings: {} } };
+            } else if (url.pathname === '/api/v1/customers') {
+              body = { data: { customers: [{ id: 101, name: 'Runtime Customer', phone: '9000000001', type: 'retail', current_balance: 1250, credit_limit: 5000, is_active: true }] } };
+            } else if (url.pathname === '/api/v1/customers/101') {
+              body = { data: { customer: { id: 101, name: 'Runtime Customer', phone: '9000000001', type: 'retail', current_balance: 1250, credit_limit: 5000, is_active: true }, orders: [], payments: [] } };
+            }
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+          });
+          const response = await page.goto('http://127.0.0.1:4182/customers', { waitUntil: 'networkidle' });
+          if (!response || response.status() !== 200) throw new Error(`Expected HTTP 200, got ${response?.status()}`);
+          await page.getByRole('heading', { name: 'Customers', exact: true }).waitFor();
+          await page.getByText('Central/PostgreSQL is the authority', { exact: false }).waitFor();
+          await page.getByText('Runtime Customer', { exact: true }).waitFor();
+          const customerCalls = calls.filter(x => x.includes('/api/v1/customers'));
+          if (customerCalls.length === 0) throw new Error('Canonical /api/v1/customers was not called');
+          await page.getByText('Runtime Customer', { exact: true }).click();
+          await page.getByRole('button', { name: /Edit master profile/i }).waitFor();
+          if (!calls.some(x => x.includes('/api/v1/customers/101'))) throw new Error('Canonical customer detail endpoint was not called');
+          if (pageErrors.length) throw new Error(`Page errors: ${pageErrors.join(' | ')}`);
+          console.log('CH06_HTTP_STATUS=200');
+          console.log('CH06_AUTHORITY_RENDERED=true');
+          console.log('CH06_CUSTOMER_LIST_RENDERED=true');
+          console.log('CH06_CUSTOMER_DETAIL_RENDERED=true');
+          console.log('CH06_CANONICAL_CALLS=' + customerCalls.join(' | '));
+          console.log('CH06_PAGE_ERRORS=[]');
+          console.log('CH06_RUNTIME_PASS=true');
+          await browser.close();
+          EOF
+          node ./ch06-runtime.mjs
