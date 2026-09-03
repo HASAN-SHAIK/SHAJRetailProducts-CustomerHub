@@ -98,7 +98,7 @@ export default function AccountsPage() {
   };
 
   return <div className="page-stack finance-overview-page">
-    <div className="page-header"><div><h1>Financial Overview</h1><p>Summary of business performance and accounts across all locations.</p></div><button className="secondary-btn" onClick={refresh}><i className="bi bi-arrow-clockwise"/> Refresh</button></div>
+    <div className="page-header"><div><h1>Financial Overview</h1><p>Summary of business performance and accounts across all locations.</p><p className="authority-note"><strong>Central/PostgreSQL accounting authority</strong> is canonical for business-management books and accounting mutations. POS keeps only store-execution cash/register actions required to sell and operate offline.</p></div><button className="secondary-btn" onClick={refresh}><i className="bi bi-arrow-clockwise"/> Refresh</button></div>
 
     <div className="metric-grid finance-metric-grid">{overviewMetrics.map((metric) => <Metric key={metric.label} {...metric} value={money(metric.value)} />)}</div>
 
