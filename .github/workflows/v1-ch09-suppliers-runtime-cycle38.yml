@@ -1,0 +1,143 @@
+name: V1 CH-09 suppliers runtime cycle38
+
+on:
+  push:
+    branches: [test/ch09-suppliers-runtime-cycle38]
+  workflow_dispatch:
+
+jobs:
+  ch09-suppliers-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Focused supplier acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/inventory-suppliers.acceptance.mjs
+      - name: Repository supplier package gate
+        id: package_gate
+        continue-on-error: true
+        run: npm run test:inventory-suppliers
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4201 > /tmp/ch09-preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4201/inventory/suppliers >/tmp/ch09.html && break; sleep 1; done
+          test -s /tmp/ch09.html
+      - name: Real Chromium supplier runtime
+        id: runtime
+        continue-on-error: true
+        run: |
+          cat > ch09-runtime.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+          const mutations = [];
+          let suppliers = [{id:'sup-1',name:'Runtime Supplier',mobile:'9000000001',email:'supplier@example.com',gst_number:'36ABCDE1234F1Z5',credit_limit:5000,current_balance:1250,branch_id:'branch-1',is_active:true}];
+          page.on('request', r => {
+            if (r.url().includes('/api/')) {
+              const u = new URL(r.url());
+              calls.push(`${r.method()} ${u.pathname}${u.search}`);
+              if (r.method() !== 'GET') {
+                let body=null; try{body=r.postDataJSON()}catch{}
+                mutations.push({method:r.method(),path:u.pathname,body});
+              }
+            }
+          });
+          await page.route('http://localhost:5001/api/**', async route => {
+            const r=route.request(), u=new URL(r.url()), p=u.pathname;
+            let body={data:{}};
+            if (p.endsWith('/auth/getLogin')) body={user:{id:'admin-1',name:'Runtime Admin',role:'admin'}};
+            else if (p.endsWith('/settings/application')) body={data:{}};
+            else if (p.endsWith('/branches')) body={data:[{id:'branch-1',branch_id:'branch-1',name:'Main Store',branch_name:'Main Store'}]};
+            else if (p.endsWith('/v1/suppliers') && r.method()==='GET') body={data:{suppliers}};
+            else if (p.endsWith('/v1/suppliers') && r.method()==='POST') {
+              const payload=r.postDataJSON();
+              suppliers=[...suppliers,{id:'sup-2',current_balance:0,...payload}];
+              body={data:{supplier:suppliers.at(-1)}};
+            } else if (p.endsWith('/v1/suppliers/sup-2') && r.method()==='PUT') {
+              const payload=r.postDataJSON();
+              suppliers=suppliers.map(x=>x.id==='sup-2'?{...x,...payload}:x);
+              body={data:{supplier:suppliers.find(x=>x.id==='sup-2')}};
+            }
+            await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+          });
+          await page.goto('http://127.0.0.1:4201/inventory/suppliers',{waitUntil:'networkidle'});
+          await page.waitForTimeout(250);
+          let text=await page.locator('body').innerText();
+          const routeOk=page.url().endsWith('/inventory/suppliers');
+          const title=text.includes('Suppliers');
+          const initial=text.includes('Runtime Supplier');
+          const authority=text.includes('Outstanding balance remains a Central financial projection');
+          const masterBoundary=text.includes('balances are purchase/payment owned');
+          const canonicalGet=calls.some(x=>x.startsWith('GET /api/v1/suppliers'));
+          await page.getByLabel('Name').fill('Runtime New Supplier');
+          await page.getByLabel('Mobile').fill('9000000002');
+          await page.getByLabel('GST number').fill('36ABCDE5678F1Z9');
+          await page.getByLabel('Credit limit').fill('7500');
+          await page.getByLabel('Branch').selectOption('branch-1');
+          await page.getByRole('button',{name:'Create supplier'}).click();
+          await page.waitForTimeout(300);
+          text=await page.locator('body').innerText();
+          const created=text.includes('Runtime New Supplier');
+          const post=mutations.find(x=>x.method==='POST'&&x.path==='/api/v1/suppliers');
+          const postPayloadOk=Boolean(post?.body && post.body.name==='Runtime New Supplier' && Number(post.body.credit_limit)===7500 && post.body.branch_id==='branch-1' && post.body.gst_number==='36ABCDE5678F1Z9' && !Object.prototype.hasOwnProperty.call(post.body,'current_balance'));
+          const row=page.locator('tr').filter({hasText:'Runtime New Supplier'});
+          await row.getByRole('button',{name:/Edit/}).click();
+          await page.getByLabel('Credit limit').fill('8000');
+          await page.getByRole('button',{name:'Save supplier'}).click();
+          await page.waitForTimeout(300);
+          const put=mutations.find(x=>x.method==='PUT'&&x.path==='/api/v1/suppliers/sup-2');
+          const putPayloadOk=Boolean(put?.body && Number(put.body.credit_limit)===8000 && !Object.prototype.hasOwnProperty.call(put.body,'current_balance'));
+          const canonicalPost=Boolean(post);
+          const canonicalPut=Boolean(put);
+          const localAuthorityCall=calls.some(x=>/indexeddb|localstorage|pos\/status|pos\/diagnostic|sync/i.test(x));
+          console.log(`CH09_ROUTE=${routeOk}`);
+          console.log(`CH09_TITLE=${title}`);
+          console.log(`CH09_INITIAL_SUPPLIER=${initial}`);
+          console.log(`CH09_AUTHORITY=${authority}`);
+          console.log(`CH09_MASTER_BOUNDARY=${masterBoundary}`);
+          console.log(`CH09_CANONICAL_GET=${canonicalGet}`);
+          console.log(`CH09_CREATED=${created}`);
+          console.log(`CH09_CANONICAL_POST=${canonicalPost}`);
+          console.log(`CH09_POST_PAYLOAD_OK=${postPayloadOk}`);
+          console.log(`CH09_CANONICAL_PUT=${canonicalPut}`);
+          console.log(`CH09_PUT_PAYLOAD_OK=${putPayloadOk}`);
+          console.log(`CH09_POS_LOCAL_AUTHORITY_CALL=${localAuthorityCall}`);
+          console.log(`CH09_CALLS=${calls.join(' | ')}`);
+          const certified=routeOk&&title&&initial&&authority&&masterBoundary&&canonicalGet&&created&&canonicalPost&&postPayloadOk&&canonicalPut&&putPayloadOk&&!localAuthorityCall;
+          if(!certified){console.error('CH09_RUNTIME_SUPPLIER_CONTRACT_FAIL');process.exitCode=1}else console.log('CH09_RUNTIME_UI_PASS');
+          await browser.close();
+          EOF
+          node ch09-runtime.mjs
+      - name: Runtime outcome verdict
+        if: always()
+        run: |
+          echo "RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          if [ "${{ steps.runtime.outcome }}" != "success" ]; then exit 1; fi
+      - name: Preview log
+        if: always()
+        run: cat /tmp/ch09-preview.log || true
+      - name: Certification result
+        if: always()
+        run: |
+          echo "FOCUSED_OUTCOME=${{ steps.focused.outcome }}"
+          echo "PACKAGE_GATE_OUTCOME=${{ steps.package_gate.outcome }}"
+          echo "RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          if [ "${{ steps.focused.outcome }}" != "success" ]; then echo "CH09_FOCUSED_FAIL"; exit 1; fi
+          if [ "${{ steps.package_gate.outcome }}" != "success" ]; then echo "CH09_PACKAGE_GATE_FAIL"; exit 1; fi
+          if [ "${{ steps.runtime.outcome }}" != "success" ]; then echo "CH09_RUNTIME_CERT_FAIL"; exit 1; fi
+          echo "CH09_CERTIFICATION_LAYER_PASS"
