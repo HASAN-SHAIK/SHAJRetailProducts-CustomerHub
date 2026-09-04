@@ -1,0 +1,26 @@
+name: V1 CH-09 routed supplier acceptance
+
+on:
+  push:
+    branches: [test/ch09-suppliers-runtime-cycle38]
+  workflow_dispatch:
+
+jobs:
+  routed-supplier-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Existing supplier acceptance
+        run: node scripts/inventory-suppliers.acceptance.mjs
+      - name: Routed supplier acceptance
+        run: node scripts/inventory-suppliers-routed.acceptance.mjs
+      - name: Production build
+        if: always()
+        run: npm run build
