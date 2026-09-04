@@ -1,0 +1,145 @@
+name: V1 CH-14 Inventory Analytics Runtime
+
+on:
+  push:
+    branches: [test/ch14-inventory-analytics-runtime]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Existing focused acceptance
+        id: focused
+        shell: bash
+        run: |
+          set +e
+          node scripts/inventory-analytics.acceptance.mjs
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "CH14_FOCUSED_EXIT=$code"
+          exit 0
+      - name: Repository package gate
+        id: package_gate
+        shell: bash
+        run: |
+          set +e
+          npm run test:inventory-analytics
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "CH14_PACKAGE_GATE_EXIT=$code"
+          exit 0
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        shell: bash
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4190 > /tmp/ch14-preview.log 2>&1 &
+          echo $! > /tmp/ch14-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4190/analytics/inventory >/tmp/ch14-shell.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4190/analytics/inventory >/tmp/ch14-shell.html
+          echo "CH14_PREVIEW_BYTES=$(wc -c </tmp/ch14-shell.html)"
+          cat /tmp/ch14-preview.log
+      - name: Real Chromium canonical analytics verification
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          const calls = [];
+
+          await page.route('**/api/**', async route => {
+            const req = route.request();
+            const url = new URL(req.url());
+            calls.push(`${req.method()} ${url.pathname}${url.search}`);
+            const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+            if (url.pathname === '/api/auth/getLogin') return json({ user: { id: 1, name: 'Runtime Admin', role: 'admin' } });
+            if (url.pathname === '/api/settings/application') return json({ data: {} });
+            if (url.pathname === '/api/branches') return json({ data: [{ branch_id: 'branch-001', branch_name: 'Main Store' }] });
+            if (url.pathname === '/api/reports/inventory') return json({ data: {
+              total_stock: 20,
+              physical_stock: 23,
+              sellable_stock: 18,
+              expired_stock: 2,
+              low_stock_products: 1,
+              out_of_stock_products: 0,
+              provisional_deficit: 3,
+              stock_value_purchase: 4500,
+              stock_basis: 'Runtime canonical aggregate'
+            }});
+            if (url.pathname === '/api/v1/products') return json({ data: { products: [{
+              id: 501,
+              name: 'Runtime Low Stock',
+              category: 'Test',
+              barcode: '8909001000501',
+              purchase_price: 100,
+              is_batch_enabled: true,
+              inventory: {
+                projected_net_quantity: 2,
+                physical_quantity: 5,
+                sellable_quantity: 2,
+                expired_quantity: 1,
+                provisional_deficit: 3,
+                is_low_stock: true,
+                is_out_of_stock: false
+              }
+            }] }});
+            return json({ data: {} });
+          });
+
+          await page.goto('http://127.0.0.1:4190/analytics/inventory', { waitUntil: 'networkidle' });
+          await page.getByText('Inventory Analytics', { exact: true }).waitFor();
+          await page.getByText('Products needing attention', { exact: true }).waitFor();
+          await page.getByText('Runtime Low Stock', { exact: true }).waitFor();
+          await page.getByText('Runtime canonical aggregate', { exact: true }).waitFor();
+
+          const reportGet = calls.some(x => x.startsWith('GET /api/reports/inventory') && x.includes('branch_id=branch-001'));
+          const productsGet = calls.some(x => x.startsWith('GET /api/v1/products') && x.includes('branch_id=branch-001'));
+          const legacyProductsGet = calls.some(x => x.startsWith('GET /api/products'));
+          const body = await page.locator('body').innerText();
+
+          console.log(`CH14_ROUTE_RENDERED=${body.includes('Inventory Analytics')}`);
+          console.log(`CH14_ATTENTION_PRODUCT_RENDERED=${body.includes('Runtime Low Stock')}`);
+          console.log(`CH14_CANONICAL_REPORT_GET=${reportGet}`);
+          console.log(`CH14_CANONICAL_V1_PRODUCTS_GET=${productsGet}`);
+          console.log(`CH14_LEGACY_PRODUCTS_GET=${legacyProductsGet}`);
+          console.log('CH14_CALLS=' + calls.join(' | '));
+
+          if (!reportGet) throw new Error('Canonical /api/reports/inventory branch-scoped request was not observed.');
+          if (!productsGet) throw new Error('Canonical /api/v1/products branch-scoped request was not observed.');
+          if (legacyProductsGet) throw new Error('Legacy /api/products inventory authority was unexpectedly used.');
+          if (!body.includes('RetailHub does not recalculate canonical totals')) throw new Error('Central aggregate authority statement was not rendered.');
+
+          console.log('CH14_RUNTIME_UI_PASS');
+          await browser.close();
+          NODE
+      - name: Final CH-14 gate
+        shell: bash
+        run: |
+          echo "Focused exit: ${{ steps.focused.outputs.exit_code }}"
+          echo "Package gate exit: ${{ steps.package_gate.outputs.exit_code }}"
+          if [ "${{ steps.focused.outputs.exit_code }}" != "0" ]; then
+            echo "CH14_FINAL=FAIL_FOCUSED_ACCEPTANCE"
+            exit 1
+          fi
+          if [ "${{ steps.package_gate.outputs.exit_code }}" != "0" ]; then
+            echo "CH14_FINAL=FAIL_PACKAGE_WIRING"
+            exit 1
+          fi
+          echo "CH14_FINAL=PASS"
