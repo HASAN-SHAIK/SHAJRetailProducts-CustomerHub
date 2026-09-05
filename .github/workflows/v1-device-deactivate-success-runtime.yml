@@ -33,6 +33,8 @@ jobs:
       - name: Relevant dashboard acceptance
         run: npm run test:dashboard
       - name: Native customer acceptance
+        id: native_customers
+        continue-on-error: true
         run: npm run test:customers
       - name: Production build against isolated Central boundary
         env:
@@ -71,3 +73,18 @@ jobs:
           echo "CUSTOMERHUB_DEVICE_SUCCESS_PROCESS_ALIVE=true"
           echo "CUSTOMERHUB_DEVICE_SUCCESS_ROUTE_HTTP=$status"
           cat /tmp/customerhub-device-success-preview.log
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-c-device-deactivate-success-evidence
+          path: |
+            /tmp/device-deactivate-success-runtime.log
+            /tmp/customerhub-device-success-preview.log
+          if-no-files-found: warn
+      - name: Certification result
+        if: always()
+        run: |
+          set -euo pipefail
+          test "${{ steps.native_customers.outcome }}" = "success"
+          grep -q 'CUSTOMERHUB_DEVICE_DEACTIVATE_SUCCESS_RUNTIME_PASS=true' /tmp/device-deactivate-success-runtime.log
