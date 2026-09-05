@@ -1,0 +1,105 @@
+name: V1 CustomerHub Expired Session Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        run: |
+          echo "EXPECTED=${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "ACTUAL=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused session-expiry acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/session-expiry.acceptance.mjs
+
+      - name: Existing acceptance suite
+        id: suite
+        continue-on-error: true
+        run: |
+          set -e
+          for f in scripts/*.acceptance.mjs; do
+            if [ "$f" = "scripts/session-expiry.acceptance.mjs" ]; then continue; fi
+            echo "=== $f ==="
+            node "$f"
+          done
+
+      - name: Production build against isolated Central boundary
+        id: build
+        continue-on-error: true
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43151/api
+          VITE_POS_SERVICE_URL: http://127.0.0.1:43152
+        run: npm run build
+
+      - name: Install browser runtime
+        if: steps.build.outcome == 'success'
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start real production preview
+        if: steps.build.outcome == 'success'
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4179 > /tmp/customerhub-preview.log 2>&1 &
+          echo $! > /tmp/customerhub-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4179/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/customerhub-preview.log
+          exit 1
+
+      - name: Real browser expired-session verification
+        id: runtime
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        env:
+          APP_URL: http://127.0.0.1:4179/
+          CENTRAL_MOCK_PORT: '43151'
+        run: node scripts/session-expiry-runtime.mjs
+
+      - name: Verify preview process remains healthy
+        id: health
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          test -s /tmp/customerhub-preview.pid
+          kill -0 "$(cat /tmp/customerhub-preview.pid)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4179/)" = "200"
+          cat /tmp/customerhub-preview.log
+
+      - name: Certification verdict
+        if: always()
+        run: |
+          echo "focused=${{ steps.focused.outcome }}"
+          echo "suite=${{ steps.suite.outcome }}"
+          echo "build=${{ steps.build.outcome }}"
+          echo "runtime=${{ steps.runtime.outcome }}"
+          echo "health=${{ steps.health.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
+          test "${{ steps.suite.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.runtime.outcome }}" = success
+          test "${{ steps.health.outcome }}" = success
