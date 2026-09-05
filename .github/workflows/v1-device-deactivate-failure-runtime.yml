@@ -1,0 +1,81 @@
+name: V1 CustomerHub Device Deactivate Failure Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused automated acceptance
+        run: node scripts/device-deactivate-failure.acceptance.mjs
+
+      - name: Relevant dashboard acceptance
+        run: npm run test:dashboard
+
+      - name: Production build against isolated Central boundary
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43153/api
+          VITE_POS_SERVICE_URL: http://127.0.0.1:43154
+        run: npm run build
+
+      - name: Install isolated browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start real production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4180 > /tmp/customerhub-device-preview.log 2>&1 &
+          echo $! > /tmp/customerhub-device-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4180/pos-setup >/dev/null; then
+              echo "CUSTOMERHUB_DEVICE_PREVIEW_READY=true"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/customerhub-device-preview.log
+          exit 1
+
+      - name: Real browser device-deactivation failure verification
+        run: |
+          set -o pipefail
+          APP_URL=http://127.0.0.1:4180/pos-setup CENTRAL_MOCK_PORT=43153 node scripts/device-deactivate-failure-runtime.mjs 2>&1 | tee /tmp/device-deactivate-runtime.log
+
+      - name: Verify application remained healthy
+        if: always()
+        run: |
+          set -euo pipefail
+          test -s /tmp/customerhub-device-preview.pid
+          kill -0 "$(cat /tmp/customerhub-device-preview.pid)"
+          status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4180/pos-setup)
+          test "$status" = "200"
+          echo "CUSTOMERHUB_DEVICE_PROCESS_ALIVE=true"
+          echo "CUSTOMERHUB_DEVICE_ROUTE_HTTP=$status"
+          cat /tmp/customerhub-device-preview.log
