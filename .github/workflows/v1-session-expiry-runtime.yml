@@ -78,7 +78,9 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4179/
           CENTRAL_MOCK_PORT: '43151'
-        run: node scripts/session-expiry-runtime.mjs
+        run: |
+          set -o pipefail
+          node scripts/session-expiry-runtime.mjs 2>&1 | tee /tmp/session-expiry-runtime.log
 
       - name: Verify preview process remains healthy
         id: health
@@ -89,6 +91,23 @@ jobs:
           kill -0 "$(cat /tmp/customerhub-preview.pid)"
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4179/)" = "200"
           cat /tmp/customerhub-preview.log
+
+      - name: Publish certification evidence
+        if: always()
+        run: |
+          {
+            echo '## V1 CustomerHub expired-session evidence'
+            echo
+            echo '```text'
+            echo "HEAD=$(git rev-parse HEAD 2>/dev/null || true)"
+            echo "focused=${{ steps.focused.outcome }}"
+            echo "suite=${{ steps.suite.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo "runtime=${{ steps.runtime.outcome }}"
+            echo "health=${{ steps.health.outcome }}"
+            if [ -f /tmp/session-expiry-runtime.log ]; then cat /tmp/session-expiry-runtime.log; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Certification verdict
         if: always()
