@@ -6,6 +6,7 @@ const api = fs.readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8
 const app = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 
 const checks = [
+  ['central auth transport uses credentialed requests', /axios\.create\(\{\s*baseURL:\s*CENTRAL_API_URL,\s*withCredentials:\s*true/.test(api)],
   ['login posts through canonical auth api with device/remember state', /login:\s*\(payload\)\s*=>\s*centralApi\.post\('\/auth\/login',\s*\{\s*\.\.\.payload,\s*device_id:\s*getDeviceId\(\),\s*remember_me:\s*true\s*\}\)/.test(api)],
   ['auth context persists successful token', /setAccessToken\(body\.token \|\| null\)/.test(auth)],
   ['auth context promotes only returned successful user', /const nextUser = body\.user \|\| null;\s*setUser\(nextUser\);\s*return nextUser;/.test(auth)],
