@@ -1,0 +1,90 @@
+name: V1 CustomerHub Setup Code Success Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+      - name: Focused setup-code automated acceptance
+        run: node scripts/setup-code-success.acceptance.mjs
+      - name: Relevant dashboard acceptance
+        run: npm run test:dashboard
+      - name: Native customer acceptance
+        id: native_customers
+        continue-on-error: true
+        run: npm run test:customers
+      - name: Production build against isolated Central boundary
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43157/api
+          VITE_POS_SERVICE_URL: http://127.0.0.1:43158
+        run: npm run build
+      - name: Install isolated browser runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start real production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4182 > /tmp/customerhub-setup-code-preview.log 2>&1 &
+          echo $! > /tmp/customerhub-setup-code-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4182/pos-setup >/dev/null; then
+              echo "CUSTOMERHUB_SETUP_CODE_PREVIEW_READY=true"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/customerhub-setup-code-preview.log
+          exit 1
+      - name: Real browser setup-code success verification
+        run: |
+          set -o pipefail
+          APP_URL=http://127.0.0.1:4182/pos-setup CENTRAL_MOCK_PORT=43157 node scripts/setup-code-success-runtime.mjs 2>&1 | tee /tmp/setup-code-success-runtime.log
+      - name: Verify application remained healthy
+        if: always()
+        run: |
+          set -euo pipefail
+          test -s /tmp/customerhub-setup-code-preview.pid
+          kill -0 "$(cat /tmp/customerhub-setup-code-preview.pid)"
+          status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4182/pos-setup)
+          test "$status" = "200"
+          echo "CUSTOMERHUB_SETUP_CODE_PROCESS_ALIVE=true"
+          echo "CUSTOMERHUB_SETUP_CODE_ROUTE_HTTP=$status"
+          cat /tmp/customerhub-setup-code-preview.log
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-c-setup-code-success-evidence
+          path: |
+            /tmp/setup-code-success-runtime.log
+            /tmp/customerhub-setup-code-preview.log
+          if-no-files-found: warn
+      - name: Certification result
+        if: always()
+        run: |
+          set -euo pipefail
+          test "${{ steps.native_customers.outcome }}" = "success"
+          grep -q 'CUSTOMERHUB_SETUP_CODE_SUCCESS_RUNTIME_PASS=true' /tmp/setup-code-success-runtime.log
