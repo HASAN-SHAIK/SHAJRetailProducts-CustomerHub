@@ -5,7 +5,7 @@ const centralPort = Number(process.env.CENTRAL_MOCK_PORT || 43155);
 const appUrl = process.env.APP_URL || 'http://127.0.0.1:4184/';
 const events = [];
 let loginBody = '';
-let settingsAuthorization = '';
+let settingsCookie = '';
 let settingsDeviceId = '';
 
 const server = http.createServer((req, res) => {
@@ -26,13 +26,14 @@ const server = http.createServer((req, res) => {
     req.setEncoding('utf8');
     req.on('data', (chunk) => { loginBody += chunk; });
     req.on('end', () => {
+      res.setHeader('Set-Cookie', 'cycle_c_session=accepted; Path=/; SameSite=Lax');
       res.writeHead(200);
       res.end(JSON.stringify({ data: { token: 'cycle-c-login-success-token', user: { id: 77, name: 'Cycle C Admin', role: 'admin', tenant_id: 'tenant-cycle-c', tenant_name: 'Cycle C Market' } } }));
     });
     return;
   }
   if (url.pathname === '/api/settings/application' && req.method === 'GET') {
-    settingsAuthorization = String(req.headers.authorization || '');
+    settingsCookie = String(req.headers.cookie || '');
     settingsDeviceId = String(req.headers['x-device-id'] || '');
     res.writeHead(200);
     return res.end(JSON.stringify({ data: { settings: { company: { shop_name: 'Cycle C Market' } } } }));
@@ -68,6 +69,7 @@ try {
   const tenantVisible = await page.getByText('Cycle C Market').first().isVisible();
   const accessToken = await page.evaluate(() => localStorage.getItem('shaj_hub_access_token'));
   const storedDeviceId = await page.evaluate(() => localStorage.getItem('shaj_hub_device_id'));
+  const cookieContinuity = settingsCookie.includes('cycle_c_session=accepted');
 
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_APP_HTTP=${response?.status()}`);
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_INITIAL_LOGIN_VISIBLE=${loginVisibleBefore}`);
@@ -80,11 +82,11 @@ try {
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_TENANT_VISIBLE=${tenantVisible}`);
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_TOKEN_PERSISTED=${accessToken === 'cycle-c-login-success-token'}`);
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_DEVICE_STABLE=${Boolean(storedDeviceId) && storedDeviceId === body.device_id && settingsDeviceId === body.device_id}`);
-  console.log(`CUSTOMERHUB_LOGIN_SUCCESS_AUTH_HEADER=${settingsAuthorization === 'Bearer cycle-c-login-success-token'}`);
+  console.log(`CUSTOMERHUB_LOGIN_SUCCESS_COOKIE_CONTINUITY=${cookieContinuity}`);
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_SETTINGS_COUNT=${settingsCount}`);
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_PAGE_ERRORS=${pageErrors.length}`);
 
-  const verdict = Boolean(response?.ok()) && loginVisibleBefore && loginCount === 1 && body.email === 'cycle-c-success@example.com' && body.password === 'correct-password' && body.remember_me === true && Boolean(body.device_id) && loginVisibleAfter === 0 && shellCount === 1 && tenantVisible && accessToken === 'cycle-c-login-success-token' && Boolean(storedDeviceId) && storedDeviceId === body.device_id && settingsDeviceId === body.device_id && settingsAuthorization === 'Bearer cycle-c-login-success-token' && settingsCount === 1 && pageErrors.length === 0;
+  const verdict = Boolean(response?.ok()) && loginVisibleBefore && loginCount === 1 && body.email === 'cycle-c-success@example.com' && body.password === 'correct-password' && body.remember_me === true && Boolean(body.device_id) && loginVisibleAfter === 0 && shellCount === 1 && tenantVisible && accessToken === 'cycle-c-login-success-token' && Boolean(storedDeviceId) && storedDeviceId === body.device_id && settingsDeviceId === body.device_id && cookieContinuity && settingsCount === 1 && pageErrors.length === 0;
   console.log(`CUSTOMERHUB_LOGIN_SUCCESS_RUNTIME_PASS=${verdict}`);
   if (!verdict) process.exitCode = 1;
 } finally {
