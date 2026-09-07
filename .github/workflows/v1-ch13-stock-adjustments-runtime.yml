@@ -1,0 +1,142 @@
+name: V1 CH-13 Stock Adjustments Runtime
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ch13:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        shell: bash
+        run: |
+          EXPECTED="${{ github.event.pull_request.head.sha || github.sha }}"
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "CH13_EXPECTED_HEAD=$EXPECTED" | tee /tmp/ch13-evidence.txt
+          echo "CH13_ACTUAL_HEAD=$ACTUAL" | tee -a /tmp/ch13-evidence.txt
+          test "$ACTUAL" = "$EXPECTED"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused existing acceptance
+        id: focused
+        shell: bash
+        run: |
+          set +e
+          node scripts/inventory-stock-adjustments.acceptance.mjs 2>&1 | tee /tmp/ch13-focused.log
+          RC=${PIPESTATUS[0]}
+          echo "CH13_FOCUSED_RC=$RC" | tee -a /tmp/ch13-evidence.txt
+          exit 0
+
+      - name: Relevant package gate
+        id: package_gate
+        shell: bash
+        run: |
+          set +e
+          npm run test:inventory-stock-adjustments 2>&1 | tee /tmp/ch13-package.log
+          RC=${PIPESTATUS[0]}
+          echo "CH13_PACKAGE_GATE_RC=$RC" | tee -a /tmp/ch13-evidence.txt
+          exit 0
+
+      - name: Production build
+        id: build
+        shell: bash
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43157/api
+        run: |
+          set +e
+          npm run build 2>&1 | tee /tmp/ch13-build.log
+          RC=${PIPESTATUS[0]}
+          echo "CH13_BUILD_RC=$RC" | tee -a /tmp/ch13-evidence.txt
+          exit 0
+
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        id: preview
+        shell: bash
+        run: |
+          set +e
+          nohup npm run preview -- --host 127.0.0.1 --port 4189 > /tmp/ch13-preview.log 2>&1 &
+          echo $! > /tmp/ch13-preview.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4189/inventory/stock-adjustments >/tmp/ch13-shell.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4189/inventory/stock-adjustments >/tmp/ch13-shell.html
+          RC=$?
+          echo "CH13_PREVIEW_RC=$RC" | tee -a /tmp/ch13-evidence.txt
+          echo "CH13_PREVIEW_BYTES=$(wc -c </tmp/ch13-shell.html)" | tee -a /tmp/ch13-evidence.txt
+          cat /tmp/ch13-preview.log
+          exit 0
+
+      - name: Real Chromium audited-adjustment verification
+        id: runtime
+        shell: bash
+        env:
+          CENTRAL_MOCK_PORT: '43157'
+          APP_URL: http://127.0.0.1:4189/inventory/stock-adjustments
+        run: |
+          set +e
+          node scripts/inventory-stock-adjustments.runtime.mjs 2>&1 | tee /tmp/ch13-runtime.log
+          RC=${PIPESTATUS[0]}
+          echo "CH13_RUNTIME_RC=$RC" | tee -a /tmp/ch13-evidence.txt
+          exit 0
+
+      - name: Post-runtime process and route health
+        id: health
+        shell: bash
+        run: |
+          set +e
+          PID="$(cat /tmp/ch13-preview.pid)"
+          kill -0 "$PID"
+          PROCESS_RC=$?
+          STATUS="$(curl -sS -o /tmp/ch13-post.html -w '%{http_code}' http://127.0.0.1:4189/inventory/stock-adjustments)"
+          if [ "$PROCESS_RC" -eq 0 ]; then echo "CH13_PROCESS_ALIVE=true"; else echo "CH13_PROCESS_ALIVE=false"; fi | tee -a /tmp/ch13-evidence.txt
+          echo "CH13_POST_RUNTIME_HTTP=$STATUS" | tee -a /tmp/ch13-evidence.txt
+          if [ "$PROCESS_RC" -eq 0 ] && [ "$STATUS" = "200" ]; then HEALTH_RC=0; else HEALTH_RC=1; fi
+          echo "CH13_HEALTH_RC=$HEALTH_RC" | tee -a /tmp/ch13-evidence.txt
+          exit 0
+
+      - name: Upload CH-13 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-c-ch13-stock-adjustments-evidence
+          path: |
+            /tmp/ch13-evidence.txt
+            /tmp/ch13-focused.log
+            /tmp/ch13-package.log
+            /tmp/ch13-build.log
+            /tmp/ch13-preview.log
+            /tmp/ch13-runtime.log
+            /tmp/ch13-post.html
+          if-no-files-found: warn
+
+      - name: Final fail-closed certification
+        if: always()
+        shell: bash
+        run: |
+          cat /tmp/ch13-evidence.txt
+          grep -q '^CH13_FOCUSED_RC=0$' /tmp/ch13-evidence.txt
+          grep -q '^CH13_PACKAGE_GATE_RC=0$' /tmp/ch13-evidence.txt
+          grep -q '^CH13_BUILD_RC=0$' /tmp/ch13-evidence.txt
+          grep -q '^CH13_PREVIEW_RC=0$' /tmp/ch13-evidence.txt
+          grep -q '^CH13_RUNTIME_RC=0$' /tmp/ch13-evidence.txt
+          grep -q '^CH13_HEALTH_RC=0$' /tmp/ch13-evidence.txt
