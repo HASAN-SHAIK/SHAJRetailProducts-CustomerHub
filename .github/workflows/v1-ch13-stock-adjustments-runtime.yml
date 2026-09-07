@@ -32,22 +32,32 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Focused existing acceptance
+        id: focused
+        continue-on-error: true
         run: node scripts/inventory-stock-adjustments.acceptance.mjs
 
       - name: Relevant package gate
+        id: package_gate
+        continue-on-error: true
         run: npm run test:inventory-stock-adjustments
 
       - name: Production build
+        id: build
+        continue-on-error: true
         env:
           VITE_CENTRAL_API_URL: http://127.0.0.1:43157/api
         run: npm run build
 
       - name: Install Chromium runtime
+        if: steps.build.outcome == 'success'
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
 
       - name: Start production preview
+        id: preview
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           nohup npm run preview -- --host 127.0.0.1 --port 4189 > /tmp/ch13-preview.log 2>&1 &
@@ -61,12 +71,18 @@ jobs:
           cat /tmp/ch13-preview.log
 
       - name: Real Chromium audited-adjustment verification
+        id: runtime
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
         env:
           CENTRAL_MOCK_PORT: '43157'
           APP_URL: http://127.0.0.1:4189/inventory/stock-adjustments
         run: node scripts/inventory-stock-adjustments.runtime.mjs
 
       - name: Post-runtime process and route health
+        id: health
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           PID="$(cat /tmp/ch13-preview.pid)"
@@ -75,3 +91,20 @@ jobs:
           echo "CH13_PROCESS_ALIVE=true"
           echo "CH13_POST_RUNTIME_HTTP=$STATUS"
           test "$STATUS" = "200"
+
+      - name: Final fail-closed certification
+        if: always()
+        shell: bash
+        run: |
+          echo "CH13_FOCUSED_OUTCOME=${{ steps.focused.outcome }}"
+          echo "CH13_PACKAGE_GATE_OUTCOME=${{ steps.package_gate.outcome }}"
+          echo "CH13_BUILD_OUTCOME=${{ steps.build.outcome }}"
+          echo "CH13_PREVIEW_OUTCOME=${{ steps.preview.outcome }}"
+          echo "CH13_RUNTIME_OUTCOME=${{ steps.runtime.outcome }}"
+          echo "CH13_HEALTH_OUTCOME=${{ steps.health.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
+          test "${{ steps.package_gate.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.preview.outcome }}" = success
+          test "${{ steps.runtime.outcome }}" = success
+          test "${{ steps.health.outcome }}" = success
