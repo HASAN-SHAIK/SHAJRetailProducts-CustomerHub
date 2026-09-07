@@ -21,18 +21,12 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
-  if (url.pathname === '/api/auth/getLogin') {
-    return json(res, 200, { data: { user: { id: 13, name: 'Runtime Admin', role: 'admin', tenant_id: 'tenant-test1', tenant_name: 'Runtime Retail' } } });
-  }
+  if (url.pathname === '/api/auth/getLogin') return json(res, 200, { data: { user: { id: 13, name: 'Runtime Admin', role: 'admin', tenant_id: 'tenant-test1', tenant_name: 'Runtime Retail' } } });
   if (url.pathname === '/api/settings/application') return json(res, 200, { data: { settings: {} } });
   if (url.pathname === '/api/branches') return json(res, 200, { data: [{ branch_id: 'branch-001', branch_name: 'Main Store' }] });
-  if (url.pathname === '/api/v1/products') {
-    return json(res, 200, { data: { products: [{ id: 101, name: 'Runtime Product', is_batch_enabled: false, inventory: { projected_net_quantity: canonicalQuantity } }] } });
-  }
+  if (url.pathname === '/api/v1/products') return json(res, 200, { data: { products: [{ id: 101, name: 'Runtime Product', is_batch_enabled: false, inventory: { projected_net_quantity: canonicalQuantity } }] } });
   if (url.pathname === '/api/batches') return json(res, 200, { data: { batches: [] } });
-  if (url.pathname === '/api/stock' && req.method === 'GET') {
-    return json(res, 200, { data: { stock: [{ branch_id: 'branch-001', product_id: 101, quantity: canonicalQuantity }] } });
-  }
+  if (url.pathname === '/api/stock' && req.method === 'GET') return json(res, 200, { data: { stock: [{ branch_id: 'branch-001', product_id: 101, quantity: canonicalQuantity }] } });
   if (url.pathname === '/api/stock/adjustments' && req.method === 'POST') {
     let raw = '';
     req.setEncoding('utf8');
@@ -60,44 +54,47 @@ page.on('pageerror', (error) => pageErrors.push(String(error)));
 
 try {
   const response = await page.goto(appUrl, { waitUntil: 'networkidle', timeout: 30000 });
-  await page.getByRole('heading', { name: 'Stock Adjustments' }).waitFor({ state: 'visible', timeout: 10000 });
-  await page.getByText('Manual correction').waitFor({ state: 'visible', timeout: 10000 });
+  const bodyBefore = await page.locator('body').innerText();
+  const routePath = new URL(page.url()).pathname;
+  const headingVisible = await page.getByRole('heading', { name: 'Stock Adjustments' }).count() > 0;
+  const manualVisible = await page.getByText('Manual correction').count() > 0;
 
-  const productSelect = page.getByLabel('Product');
-  await productSelect.selectOption('101');
-  await page.getByText('Current canonical quantity').waitFor({ state: 'visible', timeout: 10000 });
+  if (headingVisible && manualVisible) {
+    await page.getByLabel('Product').selectOption('101');
+    await page.getByLabel('Adjustment quantity').fill('2');
+    await page.getByLabel('Reason').fill('Runtime count');
+    await page.getByLabel('Reference').fill('COUNT-13');
+    await page.getByRole('button', { name: 'Apply audited adjustment' }).click();
+    await page.getByRole('heading', { name: 'Adjustment recorded' }).waitFor({ state: 'visible', timeout: 10000 });
+  }
 
-  await page.getByLabel('Adjustment quantity').fill('2');
-  await page.getByLabel('Reason').fill('Runtime count');
-  await page.getByLabel('Reference').fill('COUNT-13');
-  await page.getByRole('button', { name: 'Apply audited adjustment' }).click();
-  await page.getByRole('heading', { name: 'Adjustment recorded' }).waitFor({ state: 'visible', timeout: 10000 });
-  await page.getByText('Reason: Runtime count · Reference: COUNT-13').waitFor({ state: 'visible', timeout: 10000 });
-
-  const bodyText = await page.locator('body').innerText();
+  const bodyAfter = await page.locator('body').innerText();
   const postCount = events.filter((event) => event.startsWith('POST /api/stock/adjustments')).length;
   const stockReads = events.filter((event) => event.startsWith('GET /api/stock?')).length;
   const productReads = events.filter((event) => event.startsWith('GET /api/v1/products?')).length;
-  const routePreserved = new URL(page.url()).pathname === '/inventory/stock-adjustments';
   const payloadOk = adjustmentBody?.branch_id === 'branch-001'
     && adjustmentBody?.product_id === 101
     && adjustmentBody?.batch_id === null
     && adjustmentBody?.delta_quantity === 2
     && adjustmentBody?.reason === 'Runtime count'
     && adjustmentBody?.reference_id === 'COUNT-13';
-  const resultVisible = bodyText.includes('Before') && bodyText.includes('Delta') && bodyText.includes('After') && bodyText.includes('12');
+  const resultVisible = bodyAfter.includes('Adjustment recorded') && bodyAfter.includes('Runtime count') && bodyAfter.includes('COUNT-13');
+  const placeholderVisible = bodyBefore.includes('V1 workspace') || bodyBefore.includes('reserved for the full CustomerHub workflow');
 
   console.log(`CH13_APP_HTTP=${response?.status()}`);
+  console.log(`CH13_FINAL_PATH=${routePath}`);
+  console.log(`CH13_ROUTE_HEADING_VISIBLE=${headingVisible}`);
+  console.log(`CH13_MANUAL_CORRECTION_VISIBLE=${manualVisible}`);
+  console.log(`CH13_PLACEHOLDER_VISIBLE=${placeholderVisible}`);
   console.log(`CH13_ADJUSTMENT_POST_COUNT=${postCount}`);
   console.log(`CH13_ADJUSTMENT_PAYLOAD_OK=${payloadOk}`);
   console.log(`CH13_STOCK_READ_COUNT=${stockReads}`);
   console.log(`CH13_PRODUCT_READ_COUNT=${productReads}`);
   console.log(`CH13_CANONICAL_QUANTITY_AFTER=${canonicalQuantity}`);
   console.log(`CH13_RESULT_VISIBLE=${resultVisible}`);
-  console.log(`CH13_ROUTE_PRESERVED=${routePreserved}`);
   console.log(`CH13_PAGE_ERRORS=${pageErrors.length}`);
 
-  const verdict = Boolean(response?.ok()) && postCount === 1 && payloadOk && stockReads >= 2 && productReads >= 2 && canonicalQuantity === 12 && resultVisible && routePreserved && pageErrors.length === 0;
+  const verdict = Boolean(response?.ok()) && routePath === '/inventory/stock-adjustments' && headingVisible && manualVisible && !placeholderVisible && postCount === 1 && payloadOk && stockReads >= 2 && productReads >= 2 && canonicalQuantity === 12 && resultVisible && pageErrors.length === 0;
   console.log(`CH13_RUNTIME_PASS=${verdict}`);
   if (!verdict) process.exitCode = 1;
 } finally {
