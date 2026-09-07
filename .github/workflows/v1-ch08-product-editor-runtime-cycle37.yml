@@ -67,7 +67,6 @@ jobs:
             else if (r.method()==='PUT' && p.endsWith('/v1/products/v1-edit-1')) body={data:{product:{id:'v1-edit-1'}}};
             await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
           });
-
           await page.goto('http://127.0.0.1:4200/inventory/products/new',{waitUntil:'networkidle'});
           await page.waitForTimeout(300);
           let text=await page.locator('body').innerText();
@@ -77,7 +76,6 @@ jobs:
           const purchaseBoundary=text.includes('Batch quantities and expiry dates are created by purchase receiving.');
           const openingStockVisible=await page.getByText('Opening stock',{exact:true}).count()>0;
           const categoryListPresent=await page.locator('datalist#product-categories').count()>0;
-
           const name=page.getByLabel('Name').or(page.getByLabel('Product name *'));
           if(await name.count()) await name.first().fill('Runtime New Product');
           const selling=page.getByLabel('Selling price').or(page.getByLabel('Selling price *'));
@@ -87,18 +85,15 @@ jobs:
           if(openingStockVisible) await page.getByLabel('Opening stock').fill('7');
           const submit=page.getByRole('button',{name:/Save product|Create product/});
           if(await submit.count()){await submit.first().click();await page.waitForTimeout(400);}
-
           const legacyPost=requestBodies.find(x=>x.method==='POST'&&x.path==='/api/products');
           const v1Post=requestBodies.find(x=>x.method==='POST'&&x.path==='/api/v1/products');
           const directStockMutation=Boolean(legacyPost?.body && Object.prototype.hasOwnProperty.call(legacyPost.body,'stock_quantity')) || Boolean(v1Post?.body && Object.prototype.hasOwnProperty.call(v1Post.body,'stock_quantity'));
-
           await page.goto('http://127.0.0.1:4200/inventory/products/v1-edit-1/edit',{waitUntil:'networkidle'});
           await page.waitForTimeout(300);
           text=await page.locator('body').innerText();
           const editRoute=page.url().includes('/inventory/products/v1-edit-1/edit');
           const editTitle=text.includes('Edit Product');
           const v1ProductGet=calls.some(x=>x.startsWith('GET /api/v1/products/v1-edit-1'));
-
           console.log(`CH08_ADD_ROUTE=${addRoute}`);
           console.log(`CH08_ADD_TITLE=${addTitle}`);
           console.log(`CH08_AUDIT_BOUNDARY=${auditBoundary}`);
@@ -132,9 +127,7 @@ jobs:
             const fs = require('fs');
             const runtime = fs.existsSync('/tmp/ch08-runtime.out') ? fs.readFileSync('/tmp/ch08-runtime.out','utf8').trim() : 'runtime output unavailable';
             const body = `### Exact-head CH-08 evidence\n\n\`\`\`text\nHEAD=${context.sha}\nfocused=${process.env.FOCUSED_OUTCOME}\npackage_gate=${process.env.PACKAGE_GATE_OUTCOME}\nruntime=${process.env.RUNTIME_OUTCOME}\n${runtime}\n\`\`\``;
-            if (context.payload.pull_request?.number) {
-              await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, body});
-            }
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 57, body});
       - name: Certification result
         if: always()
         run: |
