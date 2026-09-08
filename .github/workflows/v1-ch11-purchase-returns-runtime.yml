@@ -74,6 +74,8 @@ jobs:
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage();
+          page.setDefaultTimeout(8000);
+          page.setDefaultNavigationTimeout(15000);
           const calls = [];
           const mutations = [];
           const pageErrors = [];
@@ -113,53 +115,61 @@ jobs:
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
           });
 
-          const response = await page.goto('http://127.0.0.1:4187/inventory/purchase-returns', { waitUntil: 'networkidle' });
-          let text = await page.locator('body').innerText();
-          const routeRendered = text.includes('Purchase Returns');
-          const canonicalRow = text.includes('V1 Runtime Supplier') && text.includes('Damaged');
-          const legacyRow = text.includes('LEGACY-SHOULD-NOT-RENDER');
-          const invariant = text.includes('Inventory invariant');
+          let failed = false;
+          try {
+            const response = await page.goto('http://127.0.0.1:4187/inventory/purchase-returns', { waitUntil: 'networkidle' });
+            let text = await page.locator('body').innerText();
+            const routeRendered = text.includes('Purchase Returns');
+            const canonicalRow = text.includes('V1 Runtime Supplier') && text.includes('Damaged');
+            const legacyRow = text.includes('LEGACY-SHOULD-NOT-RENDER');
+            const invariant = text.includes('Inventory invariant');
 
-          const selects = page.locator('select');
-          await selects.nth(2).selectOption('201');
-          await page.getByText(/Runtime Product.*BATCH-01.*Remaining 5/).waitFor({ state: 'visible', timeout: 10000 });
-          await selects.nth(3).selectOption('701');
-          await page.getByLabel('Return quantity').fill('2');
-          await page.getByLabel('Reason').fill('Damaged runtime return');
-          await page.getByRole('button', { name: 'Record purchase return' }).click();
-          await page.getByText('Return recorded', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
-          await page.waitForTimeout(300);
-          text = await page.locator('body').innerText();
+            const selects = page.locator('select');
+            await selects.nth(2).selectOption('201');
+            await page.getByText(/Runtime Product.*BATCH-01.*Remaining 5/).waitFor({ state: 'visible' });
+            await selects.nth(3).selectOption('701');
+            await page.getByLabel('Return quantity').fill('2');
+            await page.getByLabel('Reason').fill('Damaged runtime return');
+            await page.getByRole('button', { name: 'Record purchase return' }).click();
+            await page.getByText('Return recorded', { exact: true }).waitFor({ state: 'visible' });
+            await page.waitForTimeout(300);
+            text = await page.locator('body').innerText();
 
-          const post = mutations.find(x => x.method === 'POST' && x.path === '/v1/purchase-returns');
-          const payloadOk = Boolean(post?.body && post.body.purchase_id === 201 && post.body.supplier_id === 101 && post.body.branch_id === 'branch-001' && post.body.reason === 'Damaged runtime return' && Array.isArray(post.body.items) && post.body.items.length === 1 && post.body.items[0].batch_id === 701 && post.body.items[0].product_id === 501 && Number(post.body.items[0].quantity) === 2);
-          const canonicalGet = calls.some(c => c.startsWith('GET /v1/purchase-returns'));
-          const canonicalPost = Boolean(post);
-          const legacyGet = calls.some(c => c.startsWith('GET /purchase-returns'));
-          const detailReads = calls.filter(c => c.startsWith('GET /v1/purchases/201')).length;
-          const refreshedRemaining = text.includes('Remaining 3');
-          const successVisible = text.includes('Purchase return recorded in Central');
+            const post = mutations.find(x => x.method === 'POST' && x.path === '/v1/purchase-returns');
+            const payloadOk = Boolean(post?.body && post.body.purchase_id === 201 && post.body.supplier_id === 101 && post.body.branch_id === 'branch-001' && post.body.reason === 'Damaged runtime return' && Array.isArray(post.body.items) && post.body.items.length === 1 && post.body.items[0].batch_id === 701 && post.body.items[0].product_id === 501 && Number(post.body.items[0].quantity) === 2);
+            const canonicalGet = calls.some(c => c.startsWith('GET /v1/purchase-returns'));
+            const canonicalPost = Boolean(post);
+            const legacyGet = calls.some(c => c.startsWith('GET /purchase-returns'));
+            const detailReads = calls.filter(c => c.startsWith('GET /v1/purchases/201')).length;
+            const refreshedRemaining = text.includes('Remaining 3');
+            const successVisible = text.includes('Purchase return recorded in Central');
 
-          console.log(`CH11_APP_HTTP=${response?.status() || 0}`);
-          console.log(`CH11_ROUTE_RENDERED=${routeRendered}`);
-          console.log(`CH11_CANONICAL_ROW_RENDERED=${canonicalRow}`);
-          console.log(`CH11_LEGACY_ROW_RENDERED=${legacyRow}`);
-          console.log(`CH11_INVARIANT_VISIBLE=${invariant}`);
-          console.log(`CH11_CANONICAL_V1_RETURN_GET=${canonicalGet}`);
-          console.log(`CH11_CANONICAL_V1_RETURN_POST=${canonicalPost}`);
-          console.log(`CH11_POST_PAYLOAD_OK=${payloadOk}`);
-          console.log(`CH11_LEGACY_RETURN_GET=${legacyGet}`);
-          console.log(`CH11_PURCHASE_DETAIL_READS=${detailReads}`);
-          console.log(`CH11_REFRESHED_REMAINING=${refreshedRemaining}`);
-          console.log(`CH11_SUCCESS_VISIBLE=${successVisible}`);
-          console.log(`CH11_PAGE_ERRORS=${pageErrors.length}`);
-          console.log(`CH11_CALLS=${calls.join(' | ')}`);
-          const pass = response?.status() === 200 && routeRendered && canonicalRow && !legacyRow && invariant && canonicalGet && canonicalPost && payloadOk && !legacyGet && detailReads >= 2 && refreshedRemaining && successVisible && pageErrors.length === 0;
-          console.log(`CH11_RUNTIME_PASS=${pass}`);
-          await browser.close();
-          if (!pass) process.exit(1);
+            console.log(`CH11_APP_HTTP=${response?.status() || 0}`);
+            console.log(`CH11_ROUTE_RENDERED=${routeRendered}`);
+            console.log(`CH11_CANONICAL_ROW_RENDERED=${canonicalRow}`);
+            console.log(`CH11_LEGACY_ROW_RENDERED=${legacyRow}`);
+            console.log(`CH11_INVARIANT_VISIBLE=${invariant}`);
+            console.log(`CH11_CANONICAL_V1_RETURN_GET=${canonicalGet}`);
+            console.log(`CH11_CANONICAL_V1_RETURN_POST=${canonicalPost}`);
+            console.log(`CH11_POST_PAYLOAD_OK=${payloadOk}`);
+            console.log(`CH11_LEGACY_RETURN_GET=${legacyGet}`);
+            console.log(`CH11_PURCHASE_DETAIL_READS=${detailReads}`);
+            console.log(`CH11_REFRESHED_REMAINING=${refreshedRemaining}`);
+            console.log(`CH11_SUCCESS_VISIBLE=${successVisible}`);
+            console.log(`CH11_PAGE_ERRORS=${pageErrors.length}`);
+            console.log(`CH11_CALLS=${calls.join(' | ')}`);
+            const pass = response?.status() === 200 && routeRendered && canonicalRow && !legacyRow && invariant && canonicalGet && canonicalPost && payloadOk && !legacyGet && detailReads >= 2 && refreshedRemaining && successVisible && pageErrors.length === 0;
+            console.log(`CH11_RUNTIME_PASS=${pass}`);
+            if (!pass) failed = true;
+          } catch (error) {
+            console.error(`CH11_RUNTIME_EXCEPTION=${error?.message || error}`);
+            failed = true;
+          } finally {
+            await browser.close();
+          }
+          if (failed) process.exit(1);
           EOF
-          node ch11-runtime.mjs | tee /tmp/ch11-runtime.log
+          timeout 40s node ch11-runtime.mjs | tee /tmp/ch11-runtime.log
       - name: Post-runtime process and HTTP health
         id: health
         if: always()
