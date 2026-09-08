@@ -31,16 +31,22 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Focused existing acceptance
+        id: focused
+        continue-on-error: true
         run: node scripts/inventory-purchase-returns.acceptance.mjs
       - name: Repository package gate
+        id: package
+        continue-on-error: true
         run: npm run test:inventory-purchase-returns
       - name: Production build
+        id: build
         run: npm run build
       - name: Install Playwright runtime only
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
       - name: Start production preview
+        id: preview
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +66,8 @@ jobs:
           cat /tmp/ch11-preview.log
           exit 1
       - name: Real browser canonical purchase-return verification
+        id: runtime
+        continue-on-error: true
         shell: bash
         run: |
           cat > ch11-runtime.mjs <<'EOF'
@@ -153,7 +161,9 @@ jobs:
           EOF
           node ch11-runtime.mjs | tee /tmp/ch11-runtime.log
       - name: Post-runtime process and HTTP health
+        id: health
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -163,3 +173,20 @@ jobs:
           echo "CH11_PROCESS_ALIVE=true"
           echo "CH11_POST_RUNTIME_HTTP=$code"
           test "$code" = 200
+      - name: Final certification gate
+        if: always()
+        shell: bash
+        run: |
+          echo "CH11_FOCUSED=${{ steps.focused.outcome }}"
+          echo "CH11_PACKAGE=${{ steps.package.outcome }}"
+          echo "CH11_BUILD=${{ steps.build.outcome }}"
+          echo "CH11_PREVIEW=${{ steps.preview.outcome }}"
+          echo "CH11_RUNTIME=${{ steps.runtime.outcome }}"
+          echo "CH11_HEALTH=${{ steps.health.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
+          test "${{ steps.package.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.preview.outcome }}" = success
+          test "${{ steps.runtime.outcome }}" = success
+          test "${{ steps.health.outcome }}" = success
+          echo 'CH11_CERTIFICATION=PASS'
