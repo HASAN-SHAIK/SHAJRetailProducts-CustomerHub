@@ -1,0 +1,162 @@
+name: V1 CustomerHub Login Double Submit Cycle C
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/login-double-submit.acceptance.mjs'
+      - 'scripts/login-double-submit-runtime.mjs'
+      - '.github/workflows/v1-customerhub-login-double-submit-cycle-c.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          echo "DOUBLE_LOGIN_EXPECTED_HEAD=$expected"
+          echo "DOUBLE_LOGIN_ACTUAL_HEAD=$actual"
+          test "$actual" = "$expected"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+
+      - name: Smallest relevant automated acceptance
+        id: focused
+        continue-on-error: true
+        run: node scripts/login-double-submit.acceptance.mjs
+
+      - name: Relevant repository acceptance suite
+        id: suite
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -e
+          for f in scripts/*.acceptance.mjs; do
+            echo "=== $f ==="
+            node "$f"
+          done
+
+      - name: Production build against isolated Central boundary
+        id: build
+        continue-on-error: true
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43167/api
+          VITE_POS_SERVICE_URL: http://127.0.0.1:43168
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        if: steps.build.outcome == 'success'
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start real production preview
+        id: preview
+        if: steps.build.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup npm run preview -- --host 127.0.0.1 --port 4198 > /tmp/customerhub-double-login-preview.log 2>&1 &
+          echo $! > /tmp/customerhub-double-login-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4198/ >/dev/null; then
+              echo 'CUSTOMERHUB_DOUBLE_LOGIN_PREVIEW_HTTP=200'
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/customerhub-double-login-preview.pid)" 2>/dev/null; then
+              cat /tmp/customerhub-double-login-preview.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/customerhub-double-login-preview.log
+          exit 1
+
+      - name: Real browser duplicate-submit verification
+        id: runtime
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
+        env:
+          APP_URL: http://127.0.0.1:4198/
+          CENTRAL_MOCK_PORT: '43167'
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/login-double-submit-runtime.mjs 2>&1 | tee /tmp/customerhub-double-login-runtime.log
+
+      - name: Post-runtime process and HTTP health
+        id: health
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s /tmp/customerhub-double-login-preview.pid
+          kill -0 "$(cat /tmp/customerhub-double-login-preview.pid)"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4198/)"
+          echo 'CUSTOMERHUB_DOUBLE_LOGIN_PROCESS_ALIVE=true'
+          echo "CUSTOMERHUB_DOUBLE_LOGIN_POST_RUNTIME_HTTP=$code"
+          test "$code" = 200
+
+      - name: Record exact evidence on PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo '### Exact-head CustomerHub duplicate-login evidence'
+            echo
+            echo '```text'
+            echo "HEAD=$(git rev-parse HEAD 2>/dev/null || true)"
+            echo "focused=${{ steps.focused.outcome }}"
+            echo "suite=${{ steps.suite.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo "preview=${{ steps.preview.outcome }}"
+            echo "runtime=${{ steps.runtime.outcome }}"
+            echo "health=${{ steps.health.outcome }}"
+            if [ -f /tmp/customerhub-double-login-runtime.log ]; then cat /tmp/customerhub-double-login-runtime.log; fi
+            echo '--- preview log tail ---'
+            tail -n 80 /tmp/customerhub-double-login-preview.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/customerhub-double-login-evidence.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/customerhub-double-login-evidence.md
+
+      - name: Final fail-closed certification
+        if: always()
+        shell: bash
+        run: |
+          echo "focused=${{ steps.focused.outcome }}"
+          echo "suite=${{ steps.suite.outcome }}"
+          echo "build=${{ steps.build.outcome }}"
+          echo "preview=${{ steps.preview.outcome }}"
+          echo "runtime=${{ steps.runtime.outcome }}"
+          echo "health=${{ steps.health.outcome }}"
+          test "${{ steps.focused.outcome }}" = success
+          test "${{ steps.suite.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.preview.outcome }}" = success
+          test "${{ steps.runtime.outcome }}" = success
+          test "${{ steps.health.outcome }}" = success
+          echo 'CUSTOMERHUB_DOUBLE_LOGIN_CERTIFICATION=PASS'
