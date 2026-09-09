@@ -1,0 +1,79 @@
+name: V1 CustomerHub Refresh Singleflight Runtime Cycle C
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact head
+        run: |
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Locked install
+        run: npm ci --no-audit --no-fund
+      - name: Focused acceptance
+        run: node scripts/refresh-singleflight.acceptance.mjs
+      - name: Dashboard acceptance
+        run: npm run test:dashboard
+      - name: Customer acceptance
+        id: customers
+        continue-on-error: true
+        run: npm run test:customers
+      - name: Production build
+        env:
+          VITE_CENTRAL_API_URL: http://127.0.0.1:43165/api
+          VITE_POS_SERVICE_URL: http://127.0.0.1:43166
+        run: npm run build
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4196 > /tmp/customerhub-preview.log 2>&1 &
+          echo $! > /tmp/customerhub-preview.pid
+          for i in {1..60}; do curl -fsS http://127.0.0.1:4196/billing >/dev/null && exit 0; sleep 1; done
+          cat /tmp/customerhub-preview.log
+          exit 1
+      - name: Real Chromium parallel-401 refresh runtime
+        id: runtime
+        continue-on-error: true
+        env:
+          APP_URL: http://127.0.0.1:4196/billing
+          CENTRAL_MOCK_PORT: 43165
+        run: node scripts/refresh-singleflight-runtime.mjs | tee /tmp/refresh-singleflight-runtime.log
+      - name: Post-runtime process and HTTP health
+        id: health
+        continue-on-error: true
+        run: |
+          kill -0 "$(cat /tmp/customerhub-preview.pid)"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4196/billing)" = "200"
+      - name: Collect evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/evidence
+          cp /tmp/customerhub-preview.log /tmp/evidence/preview.log || true
+          cp /tmp/refresh-singleflight-runtime.log /tmp/evidence/runtime.log || true
+          printf 'HEAD=%s\nCUSTOMERS=%s\nRUNTIME=%s\nHEALTH=%s\n' "$(git rev-parse HEAD)" "${{ steps.customers.outcome }}" "${{ steps.runtime.outcome }}" "${{ steps.health.outcome }}" > /tmp/evidence/summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cycle-c-refresh-singleflight-evidence
+          path: /tmp/evidence
+      - name: Fail closed certification
+        if: always()
+        run: |
+          test "${{ steps.customers.outcome }}" = "success"
+          test "${{ steps.runtime.outcome }}" = "success"
+          test "${{ steps.health.outcome }}" = "success"
