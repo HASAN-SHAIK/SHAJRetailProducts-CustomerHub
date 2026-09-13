@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cat > /tmp/ch12-diagnostic.mjs <<'EOF'
+          cat > ch12-diagnostic.mjs <<'EOF'
           import { chromium } from 'playwright';
           const calls=[]; const pageErrors=[]; let page; let browser;
           try {
@@ -78,7 +78,7 @@ jobs:
           } catch(e) { console.log(`CH12_RUNTIME_EXCEPTION=${JSON.stringify(String(e))}`); console.log(`CH12_CALLS=${calls.join(' | ')}`); if(page) console.log(`CH12_FAILURE_BODY=${JSON.stringify((await page.locator('body').innerText()).slice(0,4000))}`); console.log(`CH12_PAGE_ERRORS=${JSON.stringify(pageErrors)}`); process.exitCode=1; }
           finally { if(browser) await browser.close(); }
           EOF
-          node /tmp/ch12-diagnostic.mjs 2>&1 | tee /tmp/ch12-diagnostic.log
+          node ch12-diagnostic.mjs 2>&1 | tee /tmp/ch12-diagnostic.log
       - name: Post-runtime health
         if: always()
         run: |
