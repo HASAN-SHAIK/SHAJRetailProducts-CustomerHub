@@ -1,0 +1,95 @@
+name: V1 CH-12 Purchase Book Runtime Diagnostic
+
+on:
+  push:
+    branches: [test/v1-ch12-purchase-book-runtime]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact head
+        run: test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Existing CH-12 acceptance
+        run: |
+          node scripts/inventory-purchase-book.acceptance.mjs
+          npm run test:inventory-purchase-book
+      - run: npm run build
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4190 --strictPort >/tmp/ch12-preview.log 2>&1 &
+          echo $! >/tmp/ch12-preview.pid
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4190/inventory/purchases >/dev/null && exit 0; sleep 1; done
+          cat /tmp/ch12-preview.log; exit 1
+      - name: Diagnose and enforce real browser contract
+        shell: bash
+        run: |
+          set -o pipefail
+          cat > /tmp/ch12-diagnostic.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const calls=[]; const pageErrors=[]; let page; let browser;
+          try {
+            browser=await chromium.launch({headless:true}); page=await browser.newPage();
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            await page.route('**/api/**',async route=>{
+              const req=route.request(); const u=new URL(req.url()); const path=u.pathname.replace(/^\/api/,'');
+              calls.push(`${req.method()} ${path}${u.search}`);
+              if(req.method()==='OPTIONS') return route.fulfill({status:204,body:''});
+              let body={data:{}};
+              if(path==='/auth/getLogin') body={user:{id:1,name:'Runtime Admin',role:'admin'}};
+              else if(path==='/settings/application') body={data:{}};
+              else if(path==='/branches') body={data:[{id:'branch-001',branch_id:'branch-001',name:'Main Store',branch_name:'Main Store'}]};
+              else if(path.startsWith('/purchases')) body={data:{purchases:[{id:999,supplier_name:'LEGACY-SHOULD-NOT-RENDER',invoice_number:'LEGACY-999'}]}};
+              else if(path.startsWith('/v1/suppliers')) body={data:{suppliers:[{id:101,name:'V1 Supplier'}]}};
+              else if(path==='/v1/purchases/201') body={data:{order:{id:201,supplier_id:101,supplier_name:'V1 Supplier',invoice_number:'INV-V1-201',created_at:'2026-08-30T10:00:00Z',total_price:1250,total_paid:500,payable_outstanding:750},items:[{id:1,product_id:501,product_name:'Runtime Product',quantity:5,purchase_price_snapshot:250,gst_percent:5,batch_number:'BATCH-01'}],batches:[{id:701,batch_number:'BATCH-01',quantity_remaining:5,expiry_date:'2027-08-31'}]}};
+              else if(path.startsWith('/v1/purchases')) body={data:{purchases:[{id:201,supplier_id:101,supplier_name:'V1 Supplier',invoice_number:'INV-V1-201',created_at:'2026-08-30T10:00:00Z',total_price:1250,total_paid:500,order_status:'received'}]},meta:{page:1,total:1,total_pages:1}};
+              await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+            });
+            const response=await page.goto('http://127.0.0.1:4190/inventory/purchases',{waitUntil:'networkidle'});
+            await page.waitForTimeout(1000);
+            let body=await page.locator('body').innerText();
+            console.log(`CH12_APP_HTTP=${response?.status()}`);
+            console.log(`CH12_INITIAL_URL=${page.url()}`);
+            console.log(`CH12_INITIAL_CALLS=${calls.join(' | ')}`);
+            console.log(`CH12_INITIAL_BODY=${JSON.stringify(body.slice(0,4000))}`);
+            console.log(`CH12_PAGE_ERRORS=${JSON.stringify(pageErrors)}`);
+            const rendered=body.includes('Purchase Book'); const v1Row=body.includes('V1 Supplier')&&body.includes('INV-V1-201'); const legacyRow=body.includes('LEGACY-SHOULD-NOT-RENDER')||body.includes('LEGACY-999');
+            if(v1Row){ await page.getByText('INV-V1-201',{exact:true}).click(); await page.getByText('Runtime Product',{exact:true}).waitFor({state:'visible',timeout:10000}); }
+            body=await page.locator('body').innerText();
+            const detailRendered=body.includes('Runtime Product')&&body.includes('BATCH-01')&&body.includes('Remaining 5');
+            const v1ListCall=calls.some(c=>c.startsWith('GET /v1/purchases?'))||calls.includes('GET /v1/purchases'); const v1DetailCall=calls.some(c=>c.startsWith('GET /v1/purchases/201')); const legacyCall=calls.some(c=>c.startsWith('GET /purchases'));
+            console.log(`CH12_ROUTE_RENDERED=${rendered}`); console.log(`CH12_V1_ROW_RENDERED=${v1Row}`); console.log(`CH12_LEGACY_ROW_RENDERED=${legacyRow}`); console.log(`CH12_DETAIL_RENDERED=${detailRendered}`); console.log(`CH12_CANONICAL_V1_PURCHASE_GET=${v1ListCall}`); console.log(`CH12_CANONICAL_V1_DETAIL_GET=${v1DetailCall}`); console.log(`CH12_LEGACY_PURCHASE_GET=${legacyCall}`); console.log(`CH12_CALLS=${calls.join(' | ')}`);
+            const pass=response?.status()===200&&rendered&&v1Row&&!legacyRow&&detailRendered&&v1ListCall&&v1DetailCall&&!legacyCall&&pageErrors.length===0; console.log(`CH12_RUNTIME_PASS=${pass}`); if(!pass) process.exitCode=1;
+          } catch(e) { console.log(`CH12_RUNTIME_EXCEPTION=${JSON.stringify(String(e))}`); console.log(`CH12_CALLS=${calls.join(' | ')}`); if(page) console.log(`CH12_FAILURE_BODY=${JSON.stringify((await page.locator('body').innerText()).slice(0,4000))}`); console.log(`CH12_PAGE_ERRORS=${JSON.stringify(pageErrors)}`); process.exitCode=1; }
+          finally { if(browser) await browser.close(); }
+          EOF
+          node /tmp/ch12-diagnostic.mjs 2>&1 | tee /tmp/ch12-diagnostic.log
+      - name: Post-runtime health
+        if: always()
+        run: |
+          kill -0 "$(cat /tmp/ch12-preview.pid)"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4190/inventory/purchases)" = 200
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ch12-purchase-book-runtime-diagnostic
+          path: |
+            /tmp/ch12-diagnostic.log
+            /tmp/ch12-preview.log
+          if-no-files-found: warn
