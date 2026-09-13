@@ -13,7 +13,8 @@
     "test:customers": "node scripts/customer-migration.acceptance.mjs",
     "test:staff": "node scripts/staff-migration.acceptance.mjs",
     "test:expenses": "node scripts/expense-migration.acceptance.mjs",
-    "test:accounts": "node scripts/accounting-migration.acceptance.mjs"
+    "test:accounts": "node scripts/accounting-migration.acceptance.mjs",
+    "test:inventory-purchase-book": "node scripts/inventory-purchase-book.acceptance.mjs"
   },
   "dependencies": {
     "axios": "^1.11.0",
