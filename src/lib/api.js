@@ -163,6 +163,15 @@ export const api = {
   accountBalanceSheet: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/balance-sheet', { params: { from: from || undefined, to: to || undefined } }),
   accountGstSummary: ({ from = '', to = '' } = {}) => centralApi.get('/accounts/reports/gst-summary', { params: { from: from || undefined, to: to || undefined } }),
 
+  dashboardOverview: ({ range = 'this_month', branchId, location, startDate, endDate } = {}) => centralApi.get('/dashboard/overview', {
+    params: {
+      range,
+      branch_id: branchId || undefined,
+      location: location || undefined,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+    },
+  }),
   dashboardRevenueOverview: ({ range = 'this_month', branchId, location } = {}) => centralApi.get('/dashboard/revenue-overview', {
     params: { range, branch_id: branchId || undefined, location: location || undefined },
   }),
