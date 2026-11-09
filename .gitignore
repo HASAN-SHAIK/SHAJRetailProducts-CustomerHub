@@ -4,3 +4,10 @@ dist/
 .env.local
 .DS_Store
 *.log
+
+# Credentials
+TEST_CREDENTIALS.md
+CREDENTIALS.md
+credentials.*
+*.credentials
+
