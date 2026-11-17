@@ -14,29 +14,29 @@ export default function V1FeaturePage() {
     <div className="page-stack">
       <PageHeader
         title={item.label}
-        subtitle={`${section.label} V1 workspace mapped from the original management UI.`}
-        action={<StatusBadge status={item.status || 'contract'} />}
+        subtitle={`${section.label} - planned for a later release; not available yet.`}
+        action={<StatusBadge status="contract" />}
       />
       <section className="panel">
         <div className="panel-title">
           <i className="bi bi-layout-text-window-reverse" />
           <div>
-            <h2>V1 workspace</h2>
-            <p>This screen is reserved for the full CustomerHub workflow. The navigation, route and section placement are ready for the Central API implementation.</p>
+            <h2>Coming later</h2>
+            <p>This workflow is not part of the current release. The route is reserved so navigation stays intact; no data is shown or changed here.</p>
           </div>
         </div>
         <div className="summary-cards">
           <div className="summary-card"><span>Section</span><strong>{section.label}</strong></div>
           <div className="summary-card"><span>Feature</span><strong>{item.label}</strong></div>
           <div className="summary-card"><span>Route</span><strong>{item.path}</strong></div>
-          <div className="summary-card"><span>Status</span><strong>{item.status || 'contract'}</strong></div>
+          <div className="summary-card"><span>Status</span><strong>Coming later</strong></div>
         </div>
       </section>
       <section className="panel">
         <div className="table-head">
           <div>
             <h2>Related {section.label} features</h2>
-            <p>Move between the planned workflows in this section.</p>
+            <p>Other workflows in this section.</p>
           </div>
         </div>
         <div className="chip-list">
