@@ -239,21 +239,18 @@ body[data-theme="light"] {
 }
 
 .customerhub-shell .brand-mark {
-  width: 15px;
-  height: 15px;
-  border-radius: 2px;
-  background: #0c8f7b;
-  box-shadow: none;
-  font-size: 14px;
-  transform: rotate(45deg);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #081426 url('/assets/branding/app_icon.png') center/cover no-repeat;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.28);
+  font-size: 0;
+  color: transparent;
+  transform: none;
 }
 
 .customerhub-shell .brand-mark::after {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #053a33;
+  display: none;
 }
 
 .customerhub-shell .brand-row strong {
