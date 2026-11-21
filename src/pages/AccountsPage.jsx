@@ -31,6 +31,9 @@ export default function AccountsPage() {
   const [receipt, setReceipt] = useState(emptyReceipt);
   const [payment, setPayment] = useState(emptyPayment);
   const [saving, setSaving] = useState(false);
+  const [openingCash, setOpeningCash] = useState('0');
+  const [openingBank, setOpeningBank] = useState('0');
+  const [openingSuccess, setOpeningSuccess] = useState('');
 
   const refresh = async () => {
     setStatus('loading'); setError('');
@@ -56,6 +59,17 @@ export default function AccountsPage() {
   };
 
   useEffect(() => { refresh(); }, [tab, from, to]);
+
+  useEffect(() => {
+    if (data && tab === 'opening') {
+      if (data.cash_amount !== undefined && data.cash_amount !== null) {
+        setOpeningCash(String(data.cash_amount));
+      }
+      if (data.bank_amount !== undefined && data.bank_amount !== null) {
+        setOpeningBank(String(data.bank_amount));
+      }
+    }
+  }, [data, tab]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -97,6 +111,43 @@ export default function AccountsPage() {
     finally { setSaving(false); }
   };
 
+  const saveOpeningDraft = async (e) => {
+    if (e) e.preventDefault();
+    setSaving(true); setError(''); setOpeningSuccess('');
+    try {
+      await api.saveAccountOpeningSetup({
+        cash_amount: Number(openingCash || 0),
+        bank_amount: Number(openingBank || 0),
+      });
+      setOpeningSuccess('Opening draft saved successfully.');
+      await refresh();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Unable to save opening draft.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const finalizeOpening = async (e) => {
+    if (e) e.preventDefault();
+    setSaving(true); setError(''); setOpeningSuccess('');
+    try {
+      await api.saveAccountOpeningSetup({
+        cash_amount: Number(openingCash || 0),
+        bank_amount: Number(openingBank || 0),
+      });
+      await api.finalizeAccountOpening({
+        client_txn_id: globalThis.crypto?.randomUUID?.() || `hub-opening-${Date.now()}`,
+      });
+      setOpeningSuccess('Opening setup finalized! POS Retail and Wholesale Billing are now unlocked.');
+      await refresh();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Unable to finalize opening setup.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return <div className="page-stack finance-overview-page">
     <div className="page-header"><div><h1>Financial Overview</h1><p>Central/PostgreSQL accounting authority across all locations. POS keeps only store-execution cash/register actions.</p></div><button className="secondary-btn" onClick={refresh}><i className="bi bi-arrow-clockwise"/> Refresh</button></div>
 
@@ -114,13 +165,166 @@ export default function AccountsPage() {
 
     <section className="panel"><div className="panel-title"><i className="bi bi-journal-text"/><div><h2>Accounting views</h2><p>Read-only books require Central reports authority; accounting mutations remain administrator-only.</p></div></div><div className="button-row">{[['cashbook','Cash Book'],['bankbook','Bank Book'],['ledger','Ledger'],['outstanding','Outstanding'],['receipts','Receipt Entries'],['payments','Payment Entries'],['opening','Opening Setup']].map(([key,label])=><button key={key} className={tab===key?'primary-btn':'secondary-btn'} onClick={()=>setTab(key)}>{label}</button>)}</div><div className="form-grid"><label>From<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>To<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label></div></section>
 
-    <div className="content-grid two-one"><section className="panel"><div className="panel-title"><i className="bi bi-box-arrow-in-down"/><div><h2>Receipt entry</h2><p>Admin-only Central accounting mutation.</p></div></div><form className="form-grid" onSubmit={createReceipt}><label>Customer ID<input required type="number" min="1" value={receipt.customer_id} onChange={e=>setReceipt({...receipt,customer_id:e.target.value})}/></label><label>Amount<input required type="number" min="0.01" step="0.01" value={receipt.amount} onChange={e=>setReceipt({...receipt,amount:e.target.value})}/></label><label>Mode<select value={receipt.payment_mode} onChange={e=>setReceipt({...receipt,payment_mode:e.target.value})}><option value="cash">Cash</option><option value="bank">Bank</option><option value="online">Online</option></select></label><label>Notes<input value={receipt.notes} onChange={e=>setReceipt({...receipt,notes:e.target.value})}/></label><button className="primary-btn" disabled={saving}>{saving?'Saving…':'Create receipt'}</button></form></section>
-    <section className="panel"><div className="panel-title"><i className="bi bi-box-arrow-up"/><div><h2>Payment entry</h2><p>Supplier, expense or drawings payment through Central.</p></div></div><form className="form-grid" onSubmit={createPayment}><label>Type<select value={payment.type} onChange={e=>setPayment({...payment,type:e.target.value,supplier_id:''})}><option value="supplier">Supplier</option><option value="expense">Expense</option><option value="drawings">Drawings</option></select></label>{payment.type==='supplier'&&<label>Supplier ID<input required type="number" min="1" value={payment.supplier_id} onChange={e=>setPayment({...payment,supplier_id:e.target.value})}/></label>}<label>Amount<input required type="number" min="0.01" step="0.01" value={payment.amount} onChange={e=>setPayment({...payment,amount:e.target.value})}/></label><label>Mode<select value={payment.payment_mode} onChange={e=>setPayment({...payment,payment_mode:e.target.value})}><option value="cash">Cash</option><option value="bank">Bank</option></select></label><label>Notes<input value={payment.notes} onChange={e=>setPayment({...payment,notes:e.target.value})}/></label><button className="primary-btn" disabled={saving}>{saving?'Saving…':'Create payment'}</button></form></section></div>
+    {tab === 'opening' && status === 'ready' && data && (
+      <section className="panel">
+        <div className="panel-title">
+          <i className="bi bi-door-open" />
+          <div>
+            <h2>Business Opening Setup</h2>
+            <p>Canonical initial balances for store operations and double-entry Capital ledger.</p>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '4px 12px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                background: data.is_opening_completed ? '#e6f4ea' : '#fef7e0',
+                color: data.is_opening_completed ? '#137333' : '#b06000',
+              }}
+            >
+              {data.is_opening_completed ? '● Completed (POS Unlocked)' : '● Setup Required (POS Locked)'}
+            </span>
+          </div>
+        </div>
+
+        {openingSuccess && (
+          <div className="notice-strip" style={{ marginBottom: '16px' }}>
+            <i className="bi bi-check-circle" />
+            <div>
+              <strong>Status Update</strong>
+              <span>{openingSuccess}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="metric-grid" style={{ marginBottom: '20px' }}>
+          <Metric label="Catalog Products" value={data.total_products ?? 0} delta="From Catalog" tone="neutral" />
+          <Metric label="Total Stock Qty" value={data.total_quantity ?? 0} delta="Units" tone="neutral" />
+          <Metric label="Inventory Valuation" value={money(data.inventory_value ?? 0)} delta="Cost Basis" tone="good" />
+          <Metric
+            label="Initial Capital"
+            value={money(
+              data.is_opening_completed
+                ? (data.total_capital || (Number(data.inventory_value || 0) + Number(data.cash_amount || 0) + Number(data.bank_amount || 0)))
+                : (Number(data.inventory_value || 0) + Number(openingCash || 0) + Number(openingBank || 0))
+            )}
+            delta={data.is_opening_completed ? 'Finalized' : 'Projected'}
+            tone="good"
+          />
+        </div>
+
+        {data.is_opening_completed ? (
+          <div className="notice-strip">
+            <i className="bi bi-shield-check" />
+            <div>
+              <strong>Opening Balance Finalized</strong>
+              <span>
+                Opening setup has been completed. Cash float ({money(data.cash_amount || 0)}), Bank balance ({money(data.bank_amount || 0)}), and Inventory ({money(data.inventory_value || 0)}) are locked into the Capital ledger. POS Retail and Wholesale Billing are operational.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '6px' }}>Record Opening Cash Float & Bank Balance</h3>
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
+              Enter your physical cash drawer float and operating bank balance. Once finalized, your {money(data.inventory_value ?? 0)} catalog inventory will be posted into the accounting Capital ledger, and POS Billing will be unlocked.
+            </p>
+            <form onSubmit={finalizeOpening} className="form-grid">
+              <label>
+                Opening Cash in Hand (₹)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={openingCash}
+                  onChange={(e) => setOpeningCash(e.target.value)}
+                  placeholder="0.00"
+                  disabled={saving}
+                  required
+                />
+              </label>
+              <label>
+                Opening Bank Balance (₹)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={openingBank}
+                  onChange={(e) => setOpeningBank(e.target.value)}
+                  placeholder="0.00"
+                  disabled={saving}
+                  required
+                />
+              </label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={saveOpeningDraft}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save Draft'}
+                </button>
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  disabled={saving}
+                >
+                  {saving ? 'Finalizing…' : 'Finalize Opening & Unlock POS'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </section>
+    )}
+
+    {tab !== 'opening' && (
+      <div className="content-grid two-one">
+        <section className="panel">
+          <div className="panel-title">
+            <i className="bi bi-box-arrow-in-down" />
+            <div>
+              <h2>Receipt entry</h2>
+              <p>Admin-only Central accounting mutation.</p>
+            </div>
+          </div>
+          <form className="form-grid" onSubmit={createReceipt}>
+            <label>Customer ID<input required type="number" min="1" value={receipt.customer_id} onChange={e=>setReceipt({...receipt,customer_id:e.target.value})}/></label>
+            <label>Amount<input required type="number" min="0.01" step="0.01" value={receipt.amount} onChange={e=>setReceipt({...receipt,amount:e.target.value})}/></label>
+            <label>Mode<select value={receipt.payment_mode} onChange={e=>setReceipt({...receipt,payment_mode:e.target.value})}><option value="cash">Cash</option><option value="bank">Bank</option><option value="online">Online</option></select></label>
+            <label>Notes<input value={receipt.notes} onChange={e=>setReceipt({...receipt,notes:e.target.value})}/></label>
+            <button className="primary-btn" disabled={saving}>{saving?'Saving…':'Create receipt'}</button>
+          </form>
+        </section>
+        <section className="panel">
+          <div className="panel-title">
+            <i className="bi bi-box-arrow-up" />
+            <div>
+              <h2>Payment entry</h2>
+              <p>Supplier, expense or drawings payment through Central.</p>
+            </div>
+          </div>
+          <form className="form-grid" onSubmit={createPayment}>
+            <label>Type<select value={payment.type} onChange={e=>setPayment({...payment,type:e.target.value,supplier_id:''})}><option value="supplier">Supplier</option><option value="expense">Expense</option><option value="drawings">Drawings</option></select></label>
+            {payment.type==='supplier'&&<label>Supplier ID<input required type="number" min="1" value={payment.supplier_id} onChange={e=>setPayment({...payment,supplier_id:e.target.value})}/></label>}
+            <label>Amount<input required type="number" min="0.01" step="0.01" value={payment.amount} onChange={e=>setPayment({...payment,amount:e.target.value})}/></label>
+            <label>Mode<select value={payment.payment_mode} onChange={e=>setPayment({...payment,payment_mode:e.target.value})}><option value="cash">Cash</option><option value="bank">Bank</option></select></label>
+            <label>Notes<input value={payment.notes} onChange={e=>setPayment({...payment,notes:e.target.value})}/></label>
+            <button className="primary-btn" disabled={saving}>{saving?'Saving…':'Create payment'}</button>
+          </form>
+        </section>
+      </div>
+    )}
 
     {error && <section className="panel"><div className="empty-state"><strong>Accounting data unavailable</strong><p>{error}</p><button className="secondary-btn" onClick={refresh}>Retry</button></div></section>}
     {status==='loading' && <section className="panel"><div className="empty-state">Loading accounting data…</div></section>}
-    {status==='ready' && rows.length===0 && <section className="panel"><div className="empty-state"><strong>No entries found</strong><p>{tab==='opening' ? 'Opening setup is available from Central but has no list entries to display.' : 'No canonical entries match the selected view and date scope.'}</p>{data && !Array.isArray(data) && <pre>{JSON.stringify(data, null, 2)}</pre>}</div></section>}
-    {status==='ready' && rows.length>0 && <section className="panel"><div className="panel-title"><i className="bi bi-table"/><div><h2>{tab.replaceAll('-',' ')}</h2><p>Canonical Central/PostgreSQL accounting facts.</p></div></div><div className="table-wrap"><table><thead><tr>{Object.keys(rows[0]||{}).slice(0,8).map(key=><th key={key}>{key.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={row.id || row.entry_id || row.txn_id || index}>{Object.keys(rows[0]||{}).slice(0,8).map(key=><td key={key}>{typeof row[key]==='number' && /amount|balance|debit|credit|total/i.test(key) ? money(row[key]) : String(row[key] ?? '—')}</td>)}</tr>)}</tbody></table></div></section>}
+    {status==='ready' && tab !== 'opening' && rows.length===0 && <section className="panel"><div className="empty-state"><strong>No entries found</strong><p>No canonical entries match the selected view and date scope.</p></div></section>}
+    {status==='ready' && tab === 'opening' && !data && <section className="panel"><div className="empty-state"><strong>No entries found</strong><p>Opening setup is available from Central but has no list entries to display.</p></div></section>}
+    {status==='ready' && tab !== 'opening' && rows.length>0 && <section className="panel"><div className="panel-title"><i className="bi bi-table"/><div><h2>{tab.replaceAll('-',' ')}</h2><p>Canonical Central/PostgreSQL accounting facts.</p></div></div><div className="table-wrap"><table><thead><tr>{Object.keys(rows[0]||{}).slice(0,8).map(key=><th key={key}>{key.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={row.id || row.entry_id || row.txn_id || index}>{Object.keys(rows[0]||{}).slice(0,8).map(key=><td key={key}>{typeof row[key]==='number' && /amount|balance|debit|credit|total/i.test(key) ? money(row[key]) : String(row[key] ?? '—')}</td>)}</tr>)}</tbody></table></div></section>}
   </div>;
 }
 

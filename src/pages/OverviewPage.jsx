@@ -43,6 +43,57 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [openingData, setOpeningData] = useState(null);
+  const [openingCash, setOpeningCash] = useState('0');
+  const [openingBank, setOpeningBank] = useState('0');
+  const [openingSaving, setOpeningSaving] = useState(false);
+  const [openingSuccess, setOpeningSuccess] = useState('');
+  const [openingError, setOpeningError] = useState('');
+
+  // Check opening setup status
+  useEffect(() => {
+    let active = true;
+    api.accountOpeningSetup()
+      .then((res) => {
+        if (!active) return;
+        const body = unwrap(res);
+        setOpeningData(body);
+        if (body?.cash_amount !== undefined && body?.cash_amount !== null) {
+          setOpeningCash(String(body.cash_amount));
+        }
+        if (body?.bank_amount !== undefined && body?.bank_amount !== null) {
+          setOpeningBank(String(body.bank_amount));
+        }
+      })
+      .catch(() => {
+        if (active) setOpeningData(null);
+      });
+    return () => { active = false; };
+  }, [refreshKey]);
+
+  const handleFinalizeOpening = async (e) => {
+    if (e) e.preventDefault();
+    setOpeningSaving(true);
+    setOpeningError('');
+    setOpeningSuccess('');
+    try {
+      await api.saveAccountOpeningSetup({
+        cash_amount: Number(openingCash || 0),
+        bank_amount: Number(openingBank || 0),
+      });
+      await api.finalizeAccountOpening({
+        client_txn_id: globalThis.crypto?.randomUUID?.() || `hub-opening-${Date.now()}`,
+      });
+      setOpeningSuccess('Opening setup finalized! Initial capital recorded and POS terminals unlocked.');
+      const fresh = await api.accountOpeningSetup();
+      setOpeningData(unwrap(fresh));
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setOpeningError(err?.response?.data?.message || 'Unable to finalize opening setup.');
+    } finally {
+      setOpeningSaving(false);
+    }
+  };
 
   // Load branches list for filter
   useEffect(() => {
@@ -256,6 +307,184 @@ export default function OverviewPage() {
         </div>
       </div>
 
+      {openingData && !openingData.is_opening_completed && (
+        <section
+          style={{
+            border: '2px solid #0f9f8c',
+            background: '#f0fdf9',
+            padding: '20px 24px',
+            borderRadius: '12px',
+            marginBottom: '24px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                background: '#0f9f8c',
+                color: '#fff',
+                width: '44px',
+                height: '44px',
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '22px',
+              }}
+            >
+              <i className="bi bi-door-open-fill" />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: '#065f52' }}>
+                Business Setup Required: Complete Opening Setup to Start Operations
+              </h2>
+              <p style={{ margin: '4px 0 0', color: '#475569', fontSize: '13px' }}>
+                You have imported <strong>{openingData.total_products || 0} products</strong> valued at{' '}
+                <strong>{formatCurrency(openingData.inventory_value || 0)}</strong>. Record starting cash float and bank
+                balance to initialize capital and unlock POS Billing.
+              </p>
+            </div>
+            <div style={{ marginLeft: 'auto' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '5px 12px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  background: '#fef3c7',
+                  color: '#92400e',
+                }}
+              >
+                ● POS Billing Locked
+              </span>
+            </div>
+          </div>
+
+          {openingSuccess && (
+            <div className="notice-strip" style={{ marginBottom: '16px' }}>
+              <i className="bi bi-check-circle" />
+              <div>
+                <strong>Success</strong>
+                <span>{openingSuccess}</span>
+              </div>
+            </div>
+          )}
+
+          {openingError && (
+            <div
+              style={{
+                padding: '10px 14px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#991b1b',
+                fontSize: '13px',
+                marginBottom: '14px',
+              }}
+            >
+              {openingError}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleFinalizeOpening}
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '16px',
+              alignItems: 'flex-end',
+              background: '#ffffff',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#334155',
+              }}
+            >
+              Opening Cash in Hand (₹)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={openingCash}
+                onChange={(e) => setOpeningCash(e.target.value)}
+                placeholder="0.00"
+                disabled={openingSaving}
+                required
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '14px',
+                  minWidth: '180px',
+                }}
+              />
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#334155',
+              }}
+            >
+              Opening Bank Balance (₹)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={openingBank}
+                onChange={(e) => setOpeningBank(e.target.value)}
+                placeholder="0.00"
+                disabled={openingSaving}
+                required
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '14px',
+                  minWidth: '180px',
+                }}
+              />
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginRight: 'auto' }}>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Projected Initial Capital</span>
+              <strong style={{ fontSize: '16px', color: '#0f9f8c' }}>
+                {formatCurrency(
+                  Number(openingData.inventory_value || 0) + Number(openingCash || 0) + Number(openingBank || 0)
+                )}
+              </strong>
+            </div>
+            <button
+              type="submit"
+              className="primary-btn"
+              disabled={openingSaving}
+              style={{
+                padding: '10px 18px',
+                background: '#0f9f8c',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: '700',
+                cursor: 'pointer',
+              }}
+            >
+              {openingSaving ? 'Finalizing…' : 'Finalize Opening & Unlock POS'}
+            </button>
+          </form>
+        </section>
+      )}
+
       {loading && (
         <div className="dashboard-state" aria-live="polite">
           <i className="bi bi-arrow-repeat spin" />
@@ -269,6 +498,11 @@ export default function OverviewPage() {
           <i className="bi bi-exclamation-triangle" />
           <strong>Unable to load executive metrics</strong>
           <span>{error}</span>
+          {error.includes('advanced_reports') && (
+            <div style={{ marginTop: '8px', fontSize: '13px', color: '#64748b' }}>
+              <span>Executive multi-store analytics requires the <strong>Pro</strong> or <strong>Premium</strong> plan subscription.</span>
+            </div>
+          )}
           <button className="secondary-btn" onClick={() => setRefreshKey((k) => k + 1)}>
             Retry Central metrics
           </button>
